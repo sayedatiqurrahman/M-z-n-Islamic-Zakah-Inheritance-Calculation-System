@@ -105,6 +105,7 @@
   "prices.noPrevious": "No previous capture yet",
   "prices.providerTime": "Provider time:",
   "prices.spot": "Spot (USD/oz):",
+  "prices.localMarket": "Local market rate",
   "prices.perGramLabel": "/ gram",
   "prices.perGramShort": "/g",
   "prices.live": "Live",

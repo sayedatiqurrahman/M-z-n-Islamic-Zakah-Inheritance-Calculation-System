@@ -31,7 +31,16 @@ export async function POST(request: Request) {
     }
     const result = calculateZakah(parsed.data);
     return NextResponse.json(result, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Unable to process the calculation." }, { status: 500 });
+  } catch (error) {
+    console.error("[zakah:calculate]", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    const isDev = process.env.NODE_ENV !== "production";
+    return NextResponse.json(
+      {
+        error: "Unable to process the calculation.",
+        ...(isDev ? { details: message } : {}),
+      },
+      { status: 500 },
+    );
   }
 }

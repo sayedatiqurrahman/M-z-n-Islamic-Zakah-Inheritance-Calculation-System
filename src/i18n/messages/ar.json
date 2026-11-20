@@ -105,6 +105,7 @@
   "prices.noPrevious": "لا توجد قراءة سابقة بعد",
   "prices.providerTime": "وقت المزوّد:",
   "prices.spot": "السعر الأساسي (دولار/أونصة):",
+  "prices.localMarket": "سعر السوق المحلي",
   "prices.perGramLabel": "/ غرام",
   "prices.perGramShort": "/غ",
   "prices.live": "مباشر",

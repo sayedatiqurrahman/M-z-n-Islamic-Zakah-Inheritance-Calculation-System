@@ -82,11 +82,18 @@ function MetalCard({ quote }: { quote: MetalQuote }) {
           <span className="font-medium text-slate-600">{t("prices.providerTime")}</span>{" "}
           {formatDateTime(quote.providerUpdatedAt)}
         </p>
-        <p>
-          <span className="font-medium text-slate-600">{t("prices.spot")}</span>{" "}
-          ${quote.pricePerOunceUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · 1 USD ={" "}
-          {quote.usdToCurrency.toLocaleString("en-US", { maximumFractionDigits: 4 })} {quote.currency}
-        </p>
+        {quote.basis === "LOCAL_MARKET" ? (
+          <p>
+            <span className="font-medium text-slate-600">{t("prices.spot")}</span>{" "}
+            {quote.basisLabel ?? t("prices.localMarket")}
+          </p>
+        ) : quote.pricePerOunceUsd !== null && quote.usdToCurrency !== null ? (
+          <p>
+            <span className="font-medium text-slate-600">{t("prices.spot")}</span>{" "}
+            ${quote.pricePerOunceUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · 1 USD ={" "}
+            {quote.usdToCurrency.toLocaleString("en-US", { maximumFractionDigits: 4 })} {quote.currency}
+          </p>
+        ) : null}
         <a
           href={quote.sourceUrl}
           target="_blank"

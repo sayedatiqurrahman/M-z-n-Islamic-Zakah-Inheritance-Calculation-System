@@ -332,17 +332,18 @@ export function ZakahCalculator() {
             </div>
             <div className="space-y-1.5">
               <Label>{t("zakah.goldWeight")}</Label>
-              <Input type="number" step="0.01" {...register("nisab.goldNisabGrams", { valueAsNumber: true })} />
+              <Input type="number" step="any" min="0" {...register("nisab.goldNisabGrams", { valueAsNumber: true })} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("zakah.silverWeight")}</Label>
-              <Input type="number" step="0.01" {...register("nisab.silverNisabGrams", { valueAsNumber: true })} />
+              <Input type="number" step="any" min="0" {...register("nisab.silverNisabGrams", { valueAsNumber: true })} />
             </div>
             <div className="space-y-1.5">
               <Label>{t("zakah.goldPrice")}</Label>
               <Input
                 type="number"
-                step="0.01"
+                step="any"
+                min="0"
                 {...register("nisab.goldPricePerGram", {
                   valueAsNumber: true,
                   onChange: () => setValue("nisab.isManual", true),
@@ -353,7 +354,8 @@ export function ZakahCalculator() {
               <Label>{t("zakah.silverPrice")}</Label>
               <Input
                 type="number"
-                step="0.01"
+                step="any"
+                min="0"
                 {...register("nisab.silverPricePerGram", {
                   valueAsNumber: true,
                   onChange: () => setValue("nisab.isManual", true),
@@ -433,7 +435,8 @@ export function ZakahCalculator() {
                   <Input
                     id="zakah-primary-money"
                     type="number"
-                    step="0.01"
+                    step="any"
+                    min="0"
                     className="text-lg font-semibold"
                     {...register("assets.0.amount", { valueAsNumber: true })}
                   />
@@ -504,22 +507,22 @@ export function ZakahCalculator() {
                     <>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.weight")}</Label>
-                        <Input type="number" step="0.01" {...register(`assets.${index}.weightGrams`, { valueAsNumber: true })} />
+                        <Input type="number" step="any" min="0" {...register(`assets.${index}.weightGrams`, { valueAsNumber: true })} />
                       </div>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.purity")}</Label>
-                        <Input type="number" step="0.01" min="0" max="1" {...register(`assets.${index}.purity`, { valueAsNumber: true })} />
+                        <Input type="number" step="any" min="0" max="1" {...register(`assets.${index}.purity`, { valueAsNumber: true })} />
                       </div>
                     </>
                   ) : isInKind ? (
                     <>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.quantity", { unit })}</Label>
-                        <Input type="number" step="0.01" {...register(`assets.${index}.quantity`, { valueAsNumber: true })} />
+                        <Input type="number" step="any" min="0" {...register(`assets.${index}.quantity`, { valueAsNumber: true })} />
                       </div>
                       <div className="sm:col-span-3">
                         <Label className="text-xs">{t("zakah.unitValue", { code: currency })}</Label>
-                        <Input type="number" step="0.01" {...register(`assets.${index}.unitValue`, { valueAsNumber: true })} />
+                        <Input type="number" step="any" min="0" {...register(`assets.${index}.unitValue`, { valueAsNumber: true })} />
                       </div>
                       {isCrop && (
                         <div className="sm:col-span-3">
@@ -544,7 +547,7 @@ export function ZakahCalculator() {
                   ) : (
                     <div className="sm:col-span-4">
                       <Label className="text-xs">{t("zakah.value", { code: currency })}</Label>
-                      <Input type="number" step="0.01" {...register(`assets.${index}.amount`, { valueAsNumber: true })} />
+                      <Input type="number" step="any" min="0" {...register(`assets.${index}.amount`, { valueAsNumber: true })} />
                     </div>
                   )}
                   <div className="flex items-end sm:col-span-1">
@@ -593,7 +596,7 @@ export function ZakahCalculator() {
                 </div>
                 <div className="sm:col-span-3">
                   <Label className="text-xs">{t("zakah.amount", { code: currency })}</Label>
-                  <Input type="number" step="0.01" {...register(`liabilities.${index}.amount`, { valueAsNumber: true })} />
+                  <Input type="number" step="any" min="0" {...register(`liabilities.${index}.amount`, { valueAsNumber: true })} />
                 </div>
                 <div className="flex items-end gap-2 sm:col-span-4">
                   <label className="flex items-center gap-2 text-xs">
@@ -608,6 +611,16 @@ export function ZakahCalculator() {
             ))}
           </CardContent>
         </Card>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" disabled={pending} className="bg-emerald-700 hover:bg-emerald-800">
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
+            {pending ? t("zakah.calculating") : t("zakah.calculate")}
+          </Button>
+          {Object.keys(formState.errors).length > 0 && (
+            <span className="text-sm text-destructive">{t("zakah.reviewInputs")}</span>
+          )}
+        </div>
 
         <Card>
           <CardHeader>
@@ -643,16 +656,6 @@ export function ZakahCalculator() {
             </a>
           </CardContent>
         </Card>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending} className="bg-emerald-700 hover:bg-emerald-800">
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
-            {pending ? t("zakah.calculating") : t("zakah.calculate")}
-          </Button>
-          {Object.keys(formState.errors).length > 0 && (
-            <span className="text-sm text-destructive">{t("zakah.reviewInputs")}</span>
-          )}
-        </div>
       </form>
 
       <div className="space-y-4">

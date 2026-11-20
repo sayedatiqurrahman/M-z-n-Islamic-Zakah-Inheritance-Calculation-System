@@ -105,6 +105,7 @@
   "prices.noPrevious": "এখনো কোনো পূর্ববর্তী ধারণ নেই",
   "prices.providerTime": "প্রদানকারীর সময়:",
   "prices.spot": "স্পট (ডলার/আউন্স):",
+  "prices.localMarket": "স্থানীয় বাজার দর",
   "prices.perGramLabel": "/ গ্রাম",
   "prices.perGramShort": "/গ্রা",
   "prices.live": "সরাসরি",
