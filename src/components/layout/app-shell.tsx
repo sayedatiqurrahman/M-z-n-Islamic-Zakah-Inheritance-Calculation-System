@@ -89,9 +89,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="mt-4 space-y-2 border-t border-emerald-100 pt-4 dark:border-emerald-500/15">
           <div className="flex items-center justify-between px-2">
-            <span className="text-xs text-muted-foreground">{t("common.madhhab")}</span>
+            <span className="text-xs text-muted-foreground">{t("common.methodology")}</span>
             <Badge variant="secondary" className="bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
-              {t("common.hanafi")}
+              {t("common.methodologyBadge")}
             </Badge>
           </div>
           <p className="px-2 text-[10px] leading-relaxed text-muted-foreground">
@@ -133,7 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center gap-1 sm:gap-3">
             <LivePriceTicker />
-            <Badge variant="outline" className="hidden sm:inline-flex">{t("common.hanafiVersion")}</Badge>
+            <Badge variant="outline" className="hidden sm:inline-flex">{t("common.methodologyBadge")}</Badge>
             <ThemeToggle />
             <LanguageSwitcher />
           </div>

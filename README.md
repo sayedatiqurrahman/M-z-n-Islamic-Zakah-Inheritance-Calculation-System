@@ -1,9 +1,10 @@
 # MĪZĀN — Islamic Zakah & Inheritance Calculation System
 
-MĪZĀN (ميزان, "the balance") is an academic, evidence-based Hanafi system for
-calculating Zakah and distributing an Islamic inheritance. It explains every
-result with its calculation, fiqh principle, reason, evidence and rule
-identifier — and it refuses ambiguous cases instead of guessing.
+MĪZĀN (ميزان, "the balance") is an academic, evidence-based system for Zakah
+(Hanafi methodology) and Islamic inheritance (Ahl al-Sunnah wa'l-Jamā'ah /
+Sunni-majority methodology). It explains every result with its calculation,
+fiqh principle, reason, evidence and rule identifier — and it refuses ambiguous
+cases instead of guessing.
 
 The application is anonymous by default: the calculators, learning center,
 history and PDF reports work without an account. Saved calculations are
@@ -23,12 +24,15 @@ isolated by an opaque, HTTP-only browser cookie.
   applies 2.5% only when every documented condition is satisfied. Livestock and
   crops use separately labelled classical in-kind schedules, and the eight
   recipient purposes from Qur'an 9:60 are shown with their sources.
-- **Inheritance calculator** — Hanafi fixed shares (`aṣḥāb al-furūḍ`),
+- **Inheritance calculator** — Sunni-majority fixed shares (`aṣḥāb al-furūḍ`),
   residuary heirs (`ʿaṣabah`), complete/partial exclusion (`ḥajb`), `ʿAwl`,
-  `Radd` and `Tashih` corrected bases, with exact BigInt rational arithmetic
-  and no floating-point share math. Logical heir caps reject impossible inputs
-  (two husbands, five wives, two mothers), and grouped heirs show both group
-  and per-individual amounts.
+  `Radd`, named distant kindred and `Tashih` corrected bases, with exact BigInt
+  rational arithmetic and no floating-point share math. All catalogued heir
+  categories are supported where unambiguous, including grandparents,
+  grandchildren, siblings, brothers' sons, uncles and distant kindred. Classical
+  source kitabs are shown with honest verification statuses. Inline group
+  fractions and per-individual tooltip fractions make each nisab explicit,
+  and grouped heirs show both group and per-individual amounts.
 - **Munasakha (مناسخة)** — chain multiple deceased in death order; an heir's
   inherited share passes into their own estate before redistribution. Cases are
   collapsible, the pass-through amount is labelled, and totals separate the
@@ -197,6 +201,7 @@ docs/                        Methodology and architecture documentation
 
 ## License and attribution
 
-Academic thesis project. The application name, methodology version
-(`hanafi-v1.0.0`) and every rule identifier are recorded with saved
-calculations so results remain reproducible.
+Academic thesis project. The application name, methodology versions
+(`hanafi-zakah-v1.0.0` for Zakah and `sunni-majority-all-heirs-v2.0.0` for
+inheritance) and every rule identifier are recorded with saved calculations so
+results remain reproducible.

@@ -12,11 +12,12 @@ import {
   type Rational,
 } from "@/lib/rational";
 import { fromMinorUnits, toMinorUnits } from "@/lib/formatting";
-import { UNSUPPORTED_MESSAGE, unsupported, type CalculationStepData } from "@/modules/fiqh/types";
+import { unsupported, type CalculationStepData } from "@/modules/fiqh/types";
 import {
   HEIR_MAX_COUNTS,
   INHERITANCE_METHODOLOGY_VERSION,
   INHERITANCE_RULES,
+  INHERITANCE_SOURCE_BOOKS,
   UNSUPPORTED_HEIR_TYPES,
 } from "./rules";
 import type {
@@ -55,6 +56,24 @@ interface ExcludedHeir {
   reason: string;
   ruleId: string;
 }
+
+/** Lower-ranked agnatic residuaries are excluded by the first present rank. */
+const AGNATIC_RANKS: HeirType[][] = [
+  ["SON", "SONS_SON"],
+  ["FATHER"],
+  ["PATERNAL_GRANDFATHER"],
+  ["FULL_BROTHER"],
+  ["PATERNAL_BROTHER"],
+  ["FULL_BROTHERS_SON"],
+  ["PATERNAL_BROTHERS_SON"],
+  ["FULL_PATERNAL_UNCLE"],
+  ["PATERNAL_UNCLE"],
+  ["OTHER_AGNATIC"],
+];
+
+const MATERNAL_SIBLINGS: HeirType[] = ["MATERNAL_BROTHER", "MATERNAL_SISTER"];
+const FULL_SIBLINGS: HeirType[] = ["FULL_BROTHER", "FULL_SISTER"];
+const PATERNAL_SIBLINGS: HeirType[] = ["PATERNAL_BROTHER", "PATERNAL_SISTER"];
 
 function gcd(a: bigint, b: bigint): bigint {
   let x = a < 0n ? -a : a;
@@ -99,12 +118,12 @@ function gcdBig(a: bigint, b: bigint): bigint {
 }
 
 /**
- * Conservative Hanafi inheritance engine.
+ * Sunni-majority (Ahl al-Sunnah wa'l-Jamā'ah) inheritance engine.
  *
- * Only combinations backed by a documented rule are computed. Any ambiguous
- * or unimplemented configuration returns the mandated "requires scholarly
- * verification" result rather than a guessed distribution. The final fractions
- * are normalised with Tashih (تصحيح المسألة) so per-individual shares are whole.
+ * The operational sequence is fixed shares → agnatic residuaries → Radd →
+ * distant kindred → public treasury. Combinations that cannot be represented
+ * faithfully by the catalogued categories are refused rather than guessed.
+ * Final fractions are normalised with Tashih (تصحيح المسألة).
  */
 export function calculateInheritance(input: InheritanceCalculationInput): InheritanceEngineResult {
   const steps: CalculationStepData[] = [];
@@ -134,7 +153,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   );
   if (unsupportedPresent.length > 0) {
     return unsupported(
-      `${UNSUPPORTED_MESSAGE} (Unsupported heir categories: ${unsupportedPresent.map((h) => h.type).join(", ")})`,
+      `Unsupported heir categories: ${unsupportedPresent.map((h) => h.type).join(", ")}.`,
       steps,
     );
   }
@@ -155,39 +174,66 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   }
 
   const siblingTypes: HeirType[] = [
-    "FULL_BROTHER", "FULL_SISTER", "PATERNAL_BROTHER", "PATERNAL_SISTER",
-    "MATERNAL_BROTHER", "MATERNAL_SISTER",
+    ...FULL_SIBLINGS, ...PATERNAL_SIBLINGS, ...MATERNAL_SIBLINGS,
   ];
   const siblingCount = siblingTypes.reduce((acc, t) => acc + count(t), 0);
-  if (has("PATERNAL_GRANDFATHER") && siblingCount > 0) {
-    return unsupported(
-      "Grandfather together with siblings requires the verified Hanafi grandfather-and-siblings rule, which is not yet implemented.",
-      steps,
-    );
-  }
-  if (has("FATHER") && siblingCount > 0) {
-    return unsupported(
-      "Father together with siblings requires scholarly verification in the current engine.",
-      steps,
-    );
-  }
-  if (has("SONS_SON") && has("SONS_DAUGHTER")) {
-    return unsupported("Son's son together with son's daughter requires scholarly verification.", steps);
-  }
-  const hasFull = has("FULL_BROTHER") || has("FULL_SISTER");
-  const hasPaternal = has("PATERNAL_BROTHER") || has("PATERNAL_SISTER");
-  const hasMaternal = has("MATERNAL_BROTHER") || has("MATERNAL_SISTER");
-  if ((hasFull && hasPaternal) || (hasMaternal && (hasFull || hasPaternal))) {
-    return unsupported(
-      "Mixed sibling categories (full/paternal/maternal together) require scholarly verification.",
-      steps,
-    );
-  }
-
+  const fullSiblingCount = count("FULL_BROTHER") + count("FULL_SISTER");
+  const paternalSiblingCount = count("PATERNAL_BROTHER") + count("PATERNAL_SISTER");
   const hasSon = has("SON");
   const hasSonsSon = has("SONS_SON");
   const maleDescendant = hasSon || hasSonsSon;
   const descendantExists = maleDescendant || has("DAUGHTER") || has("SONS_DAUGHTER");
+  const grandfatherWithSiblings =
+    has("PATERNAL_GRANDFATHER") && fullSiblingCount + paternalSiblingCount > 0 &&
+    !has("FATHER") && !maleDescendant;
+
+  // Zayd ibn Thabit's majority method: with no other quota heir the grandfather
+  // takes the better of sharing with the siblings as a brother and one third.
+  const grandfatherBrothers = count("FULL_BROTHER") + count("PATERNAL_BROTHER");
+  const grandfatherSisters = count("FULL_SISTER") + count("PATERNAL_SISTER");
+  const grandfatherSharingShare = rational(
+    2,
+    2 + 2 * grandfatherBrothers + grandfatherSisters,
+  );
+  const grandfatherUsesSharing =
+    grandfatherSharingShare.n * 3n >= grandfatherSharingShare.d;
+  const grandfatherTakesThird = grandfatherWithSiblings && !grandfatherUsesSharing;
+
+  // The majority method with other quota heirs (spouse, mother, descendants)
+  // or mixed full/paternal sibling classes is disputed. Maternal siblings are
+  // excluded by the grandfather in every Sunni school.
+  if (grandfatherWithSiblings) {
+    const otherQuotaHeir = (
+      ["HUSBAND", "WIFE", "MOTHER", "PATERNAL_GRANDMOTHER", "MATERNAL_GRANDMOTHER",
+        "DAUGHTER", "SONS_DAUGHTER"] as HeirType[]
+    ).some(has);
+    if (otherQuotaHeir || (fullSiblingCount > 0 && paternalSiblingCount > 0)) {
+      return unsupported(
+        "Grandfather with siblings together with other quota heirs, or with mixed full and paternal sibling classes, requires scholarly verification.",
+        steps,
+      );
+    }
+  }
+
+  if (has("DAUGHTER") && has("SONS_SON") && has("SONS_DAUGHTER")) {
+    return unsupported(
+      "A daughter together with a son's son and a son's daughter requires scholarly verification.",
+      steps,
+    );
+  }
+
+  pushStep({
+    title: "Adopt the Sunni-majority inheritance sequence",
+    calculation: "fixed shares → agnatic residuaries → Radd → distant kindred → bayt al-mal",
+    result: "Ahl al-Sunnah wa'l-Jamā'ah working basis applied",
+    fiqhPrinciple: INHERITANCE_RULES["INH-SUNNI-BASIS"].principle,
+    reason:
+      "Quota heirs are allocated first. Residuaries take the remainder, then Radd, then distant kindred. School-specific differences are retained as notes.",
+    evidence: INHERITANCE_RULES["INH-SUNNI-BASIS"].evidence,
+    references: ["INH-SUNNI-BASIS", "INH-RESIDUARY-ORDER"],
+    notes: [INHERITANCE_RULES["INH-SUNNI-BASIS"].note ?? ""],
+    ruleId: "INH-SUNNI-BASIS",
+  });
 
   // ---- Step 1: estate settlement ---------------------------------------
   const grossMinor = toMinorUnits(input.grossEstate, input.currency);
@@ -238,43 +284,158 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     reason: string,
     ruleId: string,
   ) => {
-    if (has(type)) {
+    // An exclusion can only be recorded when the causing heir is actually present.
+    if (has(type) && (!excludedBy || has(excludedBy))) {
       excluded.push({ type, count: count(type), kind, excludedBy, reason, ruleId });
     }
+  };
+
+  const excludeMany = (
+    types: readonly HeirType[],
+    kind: ExclusionKind,
+    excludedBy: HeirType,
+    reason: string,
+    ruleId: string,
+  ) => {
+    for (const type of types) exclude(type, kind, excludedBy, reason, ruleId);
   };
 
   // Complete exclusions (father is never excluded by descendants)
   exclude("PATERNAL_GRANDFATHER", "COMPLETE", "FATHER", "The father excludes the paternal grandfather.", "INH-EXCLUSION-COMPLETE");
   exclude("PATERNAL_GRANDMOTHER", "COMPLETE", "FATHER", "The father excludes the paternal grandmother.", "INH-EXCLUSION-COMPLETE");
-  for (const gm of ["PATERNAL_GRANDMOTHER", "MATERNAL_GRANDMOTHER"] as HeirType[]) {
-    if (has("MOTHER")) {
-      exclude(gm, "COMPLETE", "MOTHER", "The mother excludes the grandmother.", "INH-EXCLUSION-COMPLETE");
-    }
-  }
+  excludeMany(
+    ["PATERNAL_GRANDMOTHER", "MATERNAL_GRANDMOTHER"],
+    "COMPLETE",
+    "MOTHER",
+    "The mother excludes the grandmother.",
+    "INH-EXCLUSION-COMPLETE",
+  );
+
   exclude("SONS_DAUGHTER", "COMPLETE", "SON", "A son completely excludes the son's daughter.", "INH-EXCLUSION-COMPLETE");
   if (count("DAUGHTER") >= 2) {
     exclude("SONS_DAUGHTER", "COMPLETE", "DAUGHTER", "Two daughters completely exclude the son's daughter.", "INH-EXCLUSION-COMPLETE");
   }
   exclude("SONS_SON", "COMPLETE", "SON", "A son completely excludes the son's son.", "INH-EXCLUSION-COMPLETE");
-  for (const sibling of siblingTypes) {
-    if (hasSon || hasSonsSon) {
-      exclude(sibling, "COMPLETE", hasSon ? "SON" : "SONS_SON", "A male descendant excludes siblings.", "INH-EXCLUSION-COMPLETE");
-    }
+
+  if (maleDescendant) {
+    const descendant: HeirType = hasSon ? "SON" : "SONS_SON";
+    excludeMany(
+      [...siblingTypes, ...AGNATIC_RANKS.slice(3).flat()],
+      "COMPLETE",
+      descendant,
+      "A male descendant excludes siblings and more distant agnatic relatives.",
+      "INH-EXCLUSION-COMPLETE",
+    );
   }
-  for (const maternal of ["MATERNAL_BROTHER", "MATERNAL_SISTER"] as HeirType[]) {
-    if (descendantExists || has("FATHER")) {
-      exclude(maternal, "COMPLETE", has("FATHER") ? "FATHER" : "SON", "A descendant or the father excludes maternal siblings.", "INH-EXCLUSION-COMPLETE");
-    }
+  if (descendantExists || has("FATHER") || has("PATERNAL_GRANDFATHER")) {
+    excludeMany(
+      MATERNAL_SIBLINGS,
+      "COMPLETE",
+      has("FATHER")
+        ? "FATHER"
+        : has("PATERNAL_GRANDFATHER")
+          ? "PATERNAL_GRANDFATHER"
+          : hasSon
+            ? "SON"
+            : hasSonsSon
+              ? "SONS_SON"
+              : "SONS_DAUGHTER",
+      "A descendant, the father or the paternal grandfather excludes maternal siblings.",
+      "INH-EXCLUSION-COMPLETE",
+    );
   }
   if (count("DAUGHTER") >= 2) {
-    for (const sister of ["FULL_SISTER", "PATERNAL_SISTER"] as HeirType[]) {
-      exclude(sister, "COMPLETE", "DAUGHTER", "Two daughters exclude sisters in this configuration.", "INH-EXCLUSION-COMPLETE");
-    }
+    excludeMany(
+      ["FULL_SISTER", "PATERNAL_SISTER"],
+      "COMPLETE",
+      "DAUGHTER",
+      "Two daughters exclude sisters in this configuration.",
+      "INH-EXCLUSION-COMPLETE",
+    );
+  }
+  if (has("FULL_BROTHER")) {
+    excludeMany(
+      PATERNAL_SIBLINGS,
+      "COMPLETE",
+      "FULL_BROTHER",
+      "A full brother completely excludes paternal half-siblings.",
+      "INH-EXCLUSION-COMPLETE",
+    );
+  }
+  if (count("FULL_SISTER") >= 2 && !has("PATERNAL_BROTHER")) {
+    exclude(
+      "PATERNAL_SISTER",
+      "COMPLETE",
+      "FULL_SISTER",
+      "Two or more full sisters exclude the paternal half-sister unless a paternal half-brother is present.",
+      "INH-EXCLUSION-COMPLETE",
+    );
+  }
+  if (count("DAUGHTER") === 1 && has("FULL_SISTER") && !has("FULL_BROTHER")) {
+    excludeMany(
+      PATERNAL_SIBLINGS,
+      "COMPLETE",
+      "FULL_SISTER",
+      "A full sister who is residuary with one daughter excludes paternal half-siblings.",
+      "INH-EXCLUSION-COMPLETE",
+    );
   }
 
-  // Deduplicate exclusions
+  // A father excludes all lower collaterals; a grandfather normally excludes
+  // them too, but Sunni-majority rules let brothers inherit alongside him.
+  if (has("FATHER")) {
+    excludeMany(
+      [...AGNATIC_RANKS.slice(2).flat(), ...MATERNAL_SIBLINGS],
+      "COMPLETE",
+      "FATHER",
+      "The father excludes more distant agnatic and maternal relatives.",
+      "INH-RESIDUARY-ORDER",
+    );
+  }
+  if (has("PATERNAL_GRANDFATHER")) {
+    const lower = grandfatherWithSiblings ? AGNATIC_RANKS.slice(5).flat() : AGNATIC_RANKS.slice(3).flat();
+    excludeMany(
+      lower,
+      "COMPLETE",
+      "PATERNAL_GRANDFATHER",
+      grandfatherWithSiblings
+        ? "Brothers inherit with the grandfather, but more distant agnates do not."
+        : "The paternal grandfather excludes more distant agnatic relatives.",
+      "INH-RESIDUARY-ORDER",
+    );
+  }
+
+  // Within the collateral agnates, the first present rank excludes lower ranks.
+  for (let rankIndex = 3; rankIndex < AGNATIC_RANKS.length; rankIndex += 1) {
+    const present = AGNATIC_RANKS[rankIndex]!.find(has);
+    if (!present) continue;
+    excludeMany(
+      AGNATIC_RANKS.slice(rankIndex + 1).flat(),
+      "COMPLETE",
+      present,
+      "A nearer agnatic residuary excludes a more distant one.",
+      "INH-RESIDUARY-ORDER",
+    );
+  }
+
+  const closerThanDistantKindred = input.heirs.find(
+    (heir) => heir.count > 0 && heir.type !== "DISTANT_KINDRED" && heir.type !== "HUSBAND" && heir.type !== "WIFE",
+  );
+  if (has("DISTANT_KINDRED") && closerThanDistantKindred) {
+    exclude(
+      "DISTANT_KINDRED",
+      "COMPLETE",
+      closerThanDistantKindred.type,
+      "A closer heir, or the return of the surplus to quota heirs, excludes distant kindred.",
+      "INH-DISTANT-KINDRED",
+    );
+  }
+
+  // Deduplicate exclusions, keeping the first recorded cause (the nearest heir).
   const exclusionMap = new Map<string, ExcludedHeir>();
-  for (const e of excluded) exclusionMap.set(e.type, e);
+  for (const e of excluded) {
+    if (!exclusionMap.has(e.type)) exclusionMap.set(e.type, e);
+  }
   const excludedFinal = Array.from(exclusionMap.values());
   const isExcluded = (type: HeirType) => exclusionMap.has(type);
 
@@ -307,8 +468,29 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   if (has("PATERNAL_GRANDFATHER") && !isExcluded("PATERNAL_GRANDFATHER")) {
     if (maleDescendant) {
       addFixed("PATERNAL_GRANDFATHER", rational(1, 6), "FIXED", "INH-PARENTS", "a male descendant reduces the grandfather to 1/6");
+    } else if (grandfatherTakesThird) {
+      addFixed("PATERNAL_GRANDFATHER", rational(1, 3), "FIXED", "INH-GRANDFATHER-SIBLINGS",
+        "sharing as a brother gives less than one third, so the Sunni-majority rule gives the grandfather one third");
+    } else if (grandfatherWithSiblings) {
+      allocated.push({
+        type: "PATERNAL_GRANDFATHER",
+        count: 1,
+        fraction: RATIONAL_ZERO,
+        shareType: "RESIDUARY",
+        ruleId: "INH-GRANDFATHER-SIBLINGS",
+        reason: "sharing with the siblings as a brother is more favourable than one third",
+        residuaryWeight: 2,
+      });
     } else {
-      allocated.push({ type: "PATERNAL_GRANDFATHER", count: 1, fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "with no male descendant the grandfather inherits as residuary" });
+      allocated.push({
+        type: "PATERNAL_GRANDFATHER",
+        count: 1,
+        fraction: RATIONAL_ZERO,
+        shareType: "RESIDUARY",
+        ruleId: "INH-ASABAH",
+        reason: "with no male descendant the grandfather inherits as residuary",
+        residuaryWeight: 2,
+      });
     }
   }
 
@@ -327,7 +509,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
 
   if (has("DAUGHTER")) {
     if (maleDescendant) {
-      allocated.push({ type: "DAUGHTER", count: count("DAUGHTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "daughters become residuary with a male descendant" });
+      allocated.push({ type: "DAUGHTER", count: count("DAUGHTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "daughters become residuary with a male descendant", residuaryWeight: 1 });
     } else {
       addFixed("DAUGHTER", rational(count("DAUGHTER") === 1 ? 1 : 2, count("DAUGHTER") === 1 ? 2 : 3),
         "FIXED", "INH-CHILDREN",
@@ -338,48 +520,95 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     const d = count("DAUGHTER");
     if (d === 1) {
       addFixed("SONS_DAUGHTER", rational(1, 6), "FIXED", "INH-GRANDCHILDREN", "one daughter reduces the son's daughter to a complementary 1/6");
+    } else if (d === 0 && hasSonsSon) {
+      allocated.push({
+        type: "SONS_DAUGHTER",
+        count: count("SONS_DAUGHTER"),
+        fraction: RATIONAL_ZERO,
+        shareType: "RESIDUARY",
+        ruleId: "INH-ASABAH",
+        reason: "a son's daughter is residuary alongside a son's son at half his weight",
+        residuaryWeight: 1,
+      });
     } else if (d === 0) {
       addFixed("SONS_DAUGHTER", rational(count("SONS_DAUGHTER") === 1 ? 1 : 2, count("SONS_DAUGHTER") === 1 ? 2 : 3),
         "FIXED", "INH-GRANDCHILDREN", "son's daughters inherit when no son or daughter excludes them");
     }
   }
-  if (has("SON")) {
-    allocated.push({ type: "SON", count: count("SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "sons are residuary heirs" });
+  if (has("SON") && !isExcluded("SON")) {
+    allocated.push({ type: "SON", count: count("SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "sons are residuary heirs", residuaryWeight: 2 });
   }
-  if (has("SONS_SON")) {
-    allocated.push({ type: "SONS_SON", count: count("SONS_SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "son's sons are residuary heirs in the absence of sons" });
+  if (has("SONS_SON") && !isExcluded("SONS_SON")) {
+    allocated.push({ type: "SONS_SON", count: count("SONS_SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "son's sons are residuary heirs in the absence of sons", residuaryWeight: 2 });
   }
 
-  // Siblings
-  const addResiduarySibling = (type: HeirType, weight: number, reason: string) => {
+  // Siblings and lower agnates
+  const addResiduary = (type: HeirType, weight: number, reason: string, ruleId = "INH-ASABAH") => {
     if (has(type) && !isExcluded(type)) {
-      allocated.push({ type, count: count(type), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason, residuaryWeight: weight });
+      allocated.push({
+        type,
+        count: count(type),
+        fraction: RATIONAL_ZERO,
+        shareType: "RESIDUARY",
+        ruleId,
+        reason,
+        residuaryWeight: weight,
+      });
     }
   };
+  const addFixedSister = (type: HeirType, fraction: Rational, reason: string) => {
+    if (!has(type) || isExcluded(type)) return;
+    allocated.push({ type, count: count(type), fraction, shareType: "FIXED", ruleId: "INH-SIBLINGS", reason });
+  };
+  const sisterShare = (type: HeirType) =>
+    rational(count(type) === 1 ? 1 : 2, count(type) === 1 ? 2 : 3);
 
-  if (hasFull) {
-    if (has("FULL_BROTHER")) {
-      addResiduarySibling("FULL_BROTHER", 2, "full brothers are residuary heirs");
-      addResiduarySibling("FULL_SISTER", 1, "full sisters become residuary alongside a full brother");
-    } else if (has("FULL_SISTER") && !isExcluded("FULL_SISTER")) {
-      if (count("DAUGHTER") === 1) {
-        allocated.push({ type: "FULL_SISTER", count: count("FULL_SISTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a full sister is residuary with one daughter (عصبة مع الغير)" });
+  const hasMaternal = MATERNAL_SIBLINGS.some(has);
+  const fullSisterEligible = has("FULL_SISTER") && !isExcluded("FULL_SISTER");
+  const paternalSisterEligible = has("PATERNAL_SISTER") && !isExcluded("PATERNAL_SISTER");
+  const sisterResiduaryWithDaughter = count("DAUGHTER") === 1 && !hasSonsSon;
+  const sisterResiduaryWithGrandfather = grandfatherWithSiblings;
+  const grandfatherSisterReason = grandfatherUsesSharing
+    ? "a sister shares with the grandfather as a brother by muqasama"
+    : "the grandfather takes one third and the sister inherits the residue";
+
+  if (has("FULL_BROTHER")) {
+    addResiduary("FULL_BROTHER", 2, "full brothers are residuary heirs", "INH-SIBLINGS");
+    if (fullSisterEligible) {
+      addResiduary("FULL_SISTER", 1, "full sisters become residuary alongside a full brother", "INH-SIBLINGS");
+    }
+  } else if (has("PATERNAL_BROTHER")) {
+    addResiduary("PATERNAL_BROTHER", 2, "paternal brothers are residuary heirs", "INH-SIBLINGS");
+    if (paternalSisterEligible) {
+      addResiduary("PATERNAL_SISTER", 1, "paternal sisters become residuary alongside a paternal brother", "INH-SIBLINGS");
+    }
+    if (fullSisterEligible) {
+      addFixedSister("FULL_SISTER", sisterShare("FULL_SISTER"), "full sisters keep their fixed share when a paternal brother is residuary");
+    }
+  } else {
+    if (fullSisterEligible) {
+      if (sisterResiduaryWithGrandfather) {
+        addResiduary("FULL_SISTER", 1, grandfatherSisterReason, "INH-GRANDFATHER-SIBLINGS");
+      } else if (sisterResiduaryWithDaughter) {
+        addResiduary("FULL_SISTER", 1, "a full sister is residuary with one daughter (عصبة مع الغير)", "INH-SIBLINGS");
       } else {
-        allocated.push({ type: "FULL_SISTER", count: count("FULL_SISTER"), fraction: rational(count("FULL_SISTER") === 1 ? 1 : 2, count("FULL_SISTER") === 1 ? 2 : 3), shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: "full sisters take 1/2 or 2/3 with no male sibling" });
+        addFixedSister("FULL_SISTER", sisterShare("FULL_SISTER"), "full sisters take 1/2 or 2/3 with no male sibling");
       }
     }
-  } else if (hasPaternal) {
-    if (has("PATERNAL_BROTHER")) {
-      addResiduarySibling("PATERNAL_BROTHER", 2, "paternal brothers are residuary heirs");
-      addResiduarySibling("PATERNAL_SISTER", 1, "paternal sisters become residuary alongside a paternal brother");
-    } else if (has("PATERNAL_SISTER") && !isExcluded("PATERNAL_SISTER")) {
-      if (count("DAUGHTER") === 1) {
-        allocated.push({ type: "PATERNAL_SISTER", count: count("PATERNAL_SISTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a paternal sister is residuary with one daughter" });
+    if (paternalSisterEligible && count("FULL_SISTER") === 0) {
+      if (sisterResiduaryWithGrandfather) {
+        addResiduary("PATERNAL_SISTER", 1, grandfatherSisterReason, "INH-GRANDFATHER-SIBLINGS");
+      } else if (sisterResiduaryWithDaughter) {
+        addResiduary("PATERNAL_SISTER", 1, "a paternal sister is residuary with one daughter", "INH-SIBLINGS");
       } else {
-        allocated.push({ type: "PATERNAL_SISTER", count: count("PATERNAL_SISTER"), fraction: rational(count("PATERNAL_SISTER") === 1 ? 1 : 2, count("PATERNAL_SISTER") === 1 ? 2 : 3), shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: "paternal sisters take 1/2 or 2/3" });
+        addFixedSister("PATERNAL_SISTER", sisterShare("PATERNAL_SISTER"), "paternal sisters take 1/2 or 2/3 when no full sister exists");
       }
+    } else if (paternalSisterEligible && count("FULL_SISTER") === 1 && !sisterResiduaryWithDaughter) {
+      addFixedSister("PATERNAL_SISTER", rational(1, 6), "one paternal sister completes one full sister's 1/2 to 2/3");
     }
-  } else if (hasMaternal) {
+  }
+
+  if (hasMaternal) {
     const maternalTotal = count("MATERNAL_BROTHER") + count("MATERNAL_SISTER");
     const maternalFraction = rational(1, maternalTotal === 1 ? 6 : 3);
     const maternalReason = "maternal siblings share 1/6 (one) or 1/3 (two or more)";
@@ -387,6 +616,40 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     if (!isExcluded(representative)) {
       allocated.push({ type: representative, count: maternalTotal, fraction: maternalFraction, shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: maternalReason });
     }
+  }
+
+  for (let rankIndex = 5; rankIndex < AGNATIC_RANKS.length; rankIndex += 1) {
+    for (const type of AGNATIC_RANKS[rankIndex]!) {
+      addResiduary(type, 2, "a more distant agnatic relative inherits the residue", "INH-RESIDUARY-ORDER");
+    }
+  }
+
+  // ---- Fixed shares & residue candidates --------------------------------
+  const fixedHeirs = allocated.filter((a) => a.shareType === "FIXED");
+  const residuaryHeirs = allocated.filter((a) => a.shareType === "RESIDUARY");
+  const fixedTotal = sum(fixedHeirs.map((a) => a.fraction));
+  const raddRecipients = fixedHeirs.filter((heir) => heir.type !== "HUSBAND" && heir.type !== "WIFE");
+
+  // A sole distant kindred is not excluded by a closer heir. It may only take
+  // the residue after quota return and agnatic residuaries have been considered.
+  if (
+    has("DISTANT_KINDRED") &&
+    !isExcluded("DISTANT_KINDRED") &&
+    residuaryHeirs.length === 0 &&
+    raddRecipients.length === 0 &&
+    fixedTotal.n < fixedTotal.d
+  ) {
+    const distantHeir: AllocatedHeir = {
+      type: "DISTANT_KINDRED",
+      count: 1,
+      fraction: RATIONAL_ZERO,
+      shareType: "RESIDUARY",
+      ruleId: "INH-DISTANT-KINDRED",
+      reason: "distant kindred inherit the residue when no quota return or agnatic residuary remains",
+      residuaryWeight: 2,
+    };
+    allocated.push(distantHeir);
+    residuaryHeirs.push(distantHeir);
   }
 
   if (allocated.length === 0) {
@@ -398,8 +661,8 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     result: `${allocated.length} eligible heir group(s)`,
     fiqhPrinciple: "Eligibility is determined by causes of inheritance before shares are assigned.",
     reason: "Only heirs passing the exclusion analysis enter share calculation.",
-    evidence: INHERITANCE_RULES["INH-SPOUSE"].evidence,
-    references: ["INH-SPOUSE", "INH-PARENTS", "INH-CHILDREN"],
+    evidence: INHERITANCE_RULES["INH-SUNNI-BASIS"].evidence,
+    references: ["INH-SUNNI-BASIS", "INH-RESIDUARY-ORDER", "INH-DISTANT-KINDRED"],
     notes: [],
   });
 
@@ -415,10 +678,12 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     notes: genuineExclusions.map((e) => `${e.type}: ${e.reason}`),
   });
 
-  // ---- Fixed shares -----------------------------------------------------
-  const fixedHeirs = allocated.filter((a) => a.shareType === "FIXED");
-  const residuaryHeirs = allocated.filter((a) => a.shareType === "RESIDUARY");
-  const fixedTotal = sum(fixedHeirs.map((a) => a.fraction));
+  if (grandfatherTakesThird && fixedTotal.n > fixedTotal.d) {
+    return unsupported(
+      "The grandfather-with-brothers case also exceeds the estate through other fixed shares; this disputed adjustment requires scholarly verification.",
+      steps,
+    );
+  }
 
   pushStep({
     title: "Determine fixed shares (أصحاب الفروض)",
@@ -456,10 +721,9 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     });
   } else if (residuaryHeirs.length > 0) {
     const residue = sub(RATIONAL_ONE, fixedTotal);
-    const weights = residuaryHeirs.map((heir) => {
-      const weight = heir.type === "SON" || heir.type === "SONS_SON" || heir.type === "FULL_BROTHER" || heir.type === "PATERNAL_BROTHER" ? 2 : 1;
-      return rational(BigInt(weight * heir.count));
-    });
+    const weights = residuaryHeirs.map((heir) =>
+      rational(BigInt((heir.residuaryWeight ?? 2) * heir.count)),
+    );
     const weightSum = sum(weights);
     residuaryHeirs.forEach((heir, index) => {
       finalFractions.set(heir, mul(residue, div(weights[index], weightSum)));
@@ -470,20 +734,18 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       calculation: `1 − ${fractionToString(fixedTotal)} = ${fractionToString(residue)}`,
       result: `Residue ${fractionToString(residue)} distributed among ${residuaryHeirs.length} residuary group(s)`,
       fiqhPrinciple: INHERITANCE_RULES["INH-ASABAH"].principle,
-      reason: "The 2:1 ratio is applied only inside the agnatic residuary group after fixed shares.",
-      evidence: INHERITANCE_RULES["INH-ASABAH"].evidence,
-      references: ["INH-ASABAH"],
+      reason: "The 2:1 ratio is applied inside the agnatic residuary group after fixed shares; nearer ranks exclude more distant ones.",
+      evidence: [...INHERITANCE_RULES["INH-ASABAH"].evidence, ...INHERITANCE_RULES["INH-RESIDUARY-ORDER"].evidence],
+      references: ["INH-ASABAH", "INH-RESIDUARY-ORDER"],
       notes: residuaryHeirs.map((a) => a.reason),
     });
   } else if (fixedLessThanOne) {
-    // Radd: the surplus returns to the non-spouse fixed-share heirs. Under the
-    // Hanafi method a spouse does not take Radd while another fixed-share heir
-    // exists. If only a spouse remains, the surplus belongs to the dhawu
-    // al-arham or bayt al-mal, which this engine does not model.
-    const raddRecipients = fixedHeirs.filter((heir) => heir.type !== "HUSBAND" && heir.type !== "WIFE");
+    // Radd: the surplus returns to the non-spouse fixed-share heirs. A spouse
+    // alone leaves a residue for distant kindred or the bayt al-mal; without a
+    // named distant kindred that case is refused rather than guessed.
     if (raddRecipients.length === 0) {
       return unsupported(
-        "The surplus after the spouse's fixed share belongs to the dhawu al-arham or the bayt al-mal. This case is not currently supported by the verified Hanafi rules engine.",
+        "The surplus after the spouse's fixed share belongs to the dhawu al-arham or the bayt al-mal. Add the specific distant kindred or consult a scholar.",
         steps,
       );
     }
@@ -505,7 +767,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       reason: "Shares are less than the estate and there is no residuary heir.",
       evidence: INHERITANCE_RULES["INH-RADD"].evidence,
       references: ["INH-RADD"],
-      notes: ["Under the Hanafi method the spouse does not take Radd while another fixed-share heir exists."],
+      notes: ["In the encoded Sunni-majority method the spouse does not take Radd while another fixed-share heir exists."],
     });
   } else {
     fixedHeirs.forEach((heir) => finalFractions.set(heir, heir.fraction));
@@ -580,7 +842,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       status: "ELIGIBLE",
       exclusionKind: "NONE",
       reason: heir.reason,
-      principle: rule?.principle ?? "Hanafi inheritance rule",
+      principle: rule?.principle ?? "Sunni-majority inheritance rule",
       referenceIds: [heir.ruleId],
       shareType: heir.shareType,
       fraction: serializeFraction(fraction),
@@ -602,7 +864,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       exclusionKind: e.kind,
       excludedBy: e.excludedBy,
       reason: e.reason,
-      principle: rule?.principle ?? "Hanafi exclusion rule",
+      principle: rule?.principle ?? "Sunni-majority exclusion rule",
       referenceIds: [e.ruleId],
       explanation: `${e.type} (${e.count}) is ${e.kind === "COMPLETE" ? "completely" : "partially"} excluded${e.excludedBy ? ` by ${e.excludedBy}` : ""}: ${e.reason}.`,
     });
@@ -627,8 +889,10 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
 
   const result: InheritanceCalculationResult = {
     supported: true,
-    madhhab: "HANAFI",
+    madhhab: input.madhhab,
     methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+    methodologyBasis: "SUNNI_MAJORITY",
+    sources: INHERITANCE_SOURCE_BOOKS,
     currency: input.currency,
     grossEstate: input.grossEstate,
     funeralExpenses: input.funeralExpenses,
@@ -641,8 +905,9 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     outcomes,
     steps,
     notes: [
-      "Unsupported configurations return an explicit refusal instead of a distribution.",
-      "All evidence items carry a verification status; none are presented as verified fatwa.",
+      "This result follows the Sunni-majority sequence of quota heirs, residuaries, Radd and distant kindred.",
+      "Exact editions, page references and school differences are listed with verification statuses in the source kitabs.",
+      "All evidence items carry a verification status; none are presented as a verified fatwa.",
     ],
   };
 
@@ -776,8 +1041,10 @@ export function calculateMunasakha(input: MunasakhaCalculationInput): MunasakhaE
 
   return {
     supported: true,
-    madhhab: "HANAFI",
+    madhhab: input.madhhab,
     methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+    methodologyBasis: "SUNNI_MAJORITY",
+    sources: INHERITANCE_SOURCE_BOOKS,
     currency: input.currency,
     cases: caseResults,
     totalNetEstate,

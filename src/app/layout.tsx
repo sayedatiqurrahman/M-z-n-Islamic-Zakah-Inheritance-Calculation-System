@@ -37,8 +37,8 @@ export const metadata: Metadata = {
     template: "%s | Mīzān",
   },
   description:
-    "An academic Hanafi system for calculating Zakah and Islamic inheritance with step-by-step jurisprudential explanations, evidence and references.",
-  keywords: ["Zakah", "Inheritance", "Fara'id", "Hanafi", "Fiqh", "Mizan"],
+    "An academic system for Hanafi Zakah and Sunni-majority Islamic inheritance with step-by-step jurisprudential explanations, evidence and references.",
+  keywords: ["Zakah", "Inheritance", "Fara'id", "Hanafi", "Sunni", "Fiqh", "Mizan"],
   authors: [{ name: "Sayed Atiqur Rahman" }],
   manifest: "/manifest.webmanifest",
   applicationName: "Mīzān",

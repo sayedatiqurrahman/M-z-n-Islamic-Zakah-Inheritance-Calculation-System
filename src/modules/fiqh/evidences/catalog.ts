@@ -176,7 +176,25 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
     author: "Al-Saraji (attribution to be confirmed)",
     sourceUrl: TRUSTED_SOURCES.dorar,
     verificationStatus: "REFERENCE_REQUIRED",
-    note: "Standard Hanafi fara'id primer; edition and page references pending verification.",
+    note: "Standard fara'id primer used across Sunni curricula; edition and page references pending verification.",
+  },
+  CLASSICAL_AL_MUGHNI: {
+    id: "CLASSICAL_AL_MUGHNI",
+    type: "CLASSICAL",
+    label: "Al-Mughnī — المغني",
+    author: "Ibn Qudāmah al-Maqdisī (attribution to be confirmed)",
+    sourceUrl: TRUSTED_SOURCES.dorar,
+    verificationStatus: "REFERENCE_REQUIRED",
+    note: "Hanbali comparative fiqh work cited for the Sunni-majority sequence; volume and page intentionally omitted until verified.",
+  },
+  CLASSICAL_AL_MAJMU: {
+    id: "CLASSICAL_AL_MAJMU",
+    type: "CLASSICAL",
+    label: "Al-Majmūʿ Sharḥ al-Muhadhdhab — المجموع شرح المهذب",
+    author: "Imām al-Nawawī (attribution to be confirmed)",
+    sourceUrl: TRUSTED_SOURCES.dorar,
+    verificationStatus: "REFERENCE_REQUIRED",
+    note: "Shafi'i fiqh reference cited for the Sunni-majority sequence; volume and page intentionally omitted until verified.",
   },
 
   INSTITUTIONAL_AAOIFI: {

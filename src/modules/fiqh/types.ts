@@ -53,7 +53,7 @@ export interface UnsupportedResult {
 }
 
 export const UNSUPPORTED_MESSAGE =
-  "Calculation requires scholarly verification. This case is not currently supported by the verified Hanafi rules engine.";
+  "Calculation requires scholarly verification. This case is not currently supported by the verified rules engine.";
 
 export function unsupported(reason?: string, steps: CalculationStepData[] = []): UnsupportedResult {
   return { supported: false, reason: reason ?? UNSUPPORTED_MESSAGE, steps };

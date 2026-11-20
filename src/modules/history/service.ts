@@ -46,15 +46,19 @@ async function resolveRuleIds(candidates: (string | null | undefined)[]): Promis
   return new Set(rows.map((row) => row.ruleId));
 }
 
-async function resolveMethodology(version: string) {
-  const madhhab = await prisma.madhhab.findUnique({ where: { key: "HANAFI" } });
-  if (!madhhab) throw new Error("Hanafi madhhab is not seeded.");
-  // The engine version (e.g. hanafi-zakah-v1.0.0) is stored in the input
-  // snapshot; the rule registry is attached to the active methodology record.
+type MethodologyDomain = "ZAKAH" | "INHERITANCE";
+
+async function resolveMethodology(version: string, domain: MethodologyDomain) {
+  // Zakah uses the Hanafi version; inheritance uses the declared Sunni-majority
+  // version. Legacy inheritance inputs still resolve to the active Sunni row
+  // so old snapshots remain saveable without claiming a Hanafi inheritance.
+  const key = domain === "ZAKAH" ? "HANAFI" : "SUNNI_MAJORITY";
+  const madhhab = await prisma.madhhab.findUnique({ where: { key } });
+  if (!madhhab) throw new Error(`${key} madhhab is not seeded.`);
   const methodology =
     (await prisma.methodologyVersion.findFirst({ where: { madhhabId: madhhab.id, version } })) ??
     (await prisma.methodologyVersion.findFirst({ where: { madhhabId: madhhab.id, isActive: true } }));
-  if (!methodology) throw new Error("Methodology version is not seeded.");
+  if (!methodology) throw new Error(`${key} methodology version is not seeded.`);
   return { madhhab, methodology };
 }
 
@@ -84,7 +88,7 @@ function serializeSteps(
 
 export async function saveZakahCalculation(anonymousId: string, raw: unknown): Promise<HistorySummary> {
   const input = zakahRequestSchema.parse(raw) as ZakahRequest;
-  const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion);
+  const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion, "ZAKAH");
   const result = calculateZakah(input);
   const ruleIds = await resolveRuleIds(result.steps.map((step) => step.ruleId));
 
@@ -232,7 +236,7 @@ export async function saveInheritanceCalculation(
   raw: unknown,
 ): Promise<HistorySummary> {
   const input = inheritanceRequestSchema.parse(raw) as InheritanceRequest;
-  const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion);
+  const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion, "INHERITANCE");
   const result = calculateInheritance(input);
   const ruleIds = await resolveRuleIds(result.steps.map((step) => step.ruleId));
 
@@ -356,7 +360,7 @@ export async function saveInheritanceCalculation(
       debts: result.debts,
       validBequests: result.validBequests,
       netDistributable: result.netDistributable,
-      adjustment: result.adjustment,
+      adjustment: result.adjustment === "DISTANT_KINDRED" ? "NONE" : result.adjustment,
       baseNumerator: 1,
       baseDenominator: result.baseDenominator,
       currency: result.currency,

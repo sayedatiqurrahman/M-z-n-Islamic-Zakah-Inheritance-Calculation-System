@@ -4,7 +4,7 @@ import HomeView from "@/components/home/home-view";
 export const metadata: Metadata = {
   title: "Mīzān",
   description:
-    "Mīzān — an evidence-based Hanafi system for Zakah and Islamic inheritance with explained, versioned calculations.",
+    "Mīzān — evidence-based Hanafi Zakah and Sunni-majority inheritance calculations with explained, versioned results.",
 };
 
 export default function HomePage() {

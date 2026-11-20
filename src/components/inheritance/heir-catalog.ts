@@ -56,12 +56,12 @@ export const HEIR_GROUPS: HeirGroup[] = [
   {
     titleKey: "heirs.group.other",
     options: [
-      option("FULL_BROTHERS_SON", false),
-      option("PATERNAL_BROTHERS_SON", false),
-      option("FULL_PATERNAL_UNCLE", false),
-      option("PATERNAL_UNCLE", false),
-      option("OTHER_AGNATIC", false),
-      option("DISTANT_KINDRED", false),
+      option("FULL_BROTHERS_SON", true),
+      option("PATERNAL_BROTHERS_SON", true),
+      option("FULL_PATERNAL_UNCLE", true),
+      option("PATERNAL_UNCLE", true),
+      option("OTHER_AGNATIC", true),
+      option("DISTANT_KINDRED", true),
     ],
   },
 ];

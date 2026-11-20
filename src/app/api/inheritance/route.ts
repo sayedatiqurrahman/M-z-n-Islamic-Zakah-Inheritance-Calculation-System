@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { inheritanceRequestSchema, munasakhaRequestSchema } from "@/modules/inheritance/schemas";
 import { calculateInheritance, calculateMunasakha } from "@/modules/inheritance/engine";
-import { getProvider } from "@/modules/fiqh/madhhabs";
 import { INHERITANCE_METHODOLOGY_VERSION } from "@/modules/inheritance/rules";
 
 export const runtime = "nodejs";
+
+function isEnabledBasis(madhhab: "HANAFI" | "SUNNI_MAJORITY") {
+  // v2 is explicitly Sunni-majority; accepting HANAFI would mislabel the basis.
+  return madhhab === "SUNNI_MAJORITY";
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,10 +24,9 @@ export async function POST(request: Request) {
         );
       }
       const data = parsed.data;
-      const provider = getProvider(data.madhhab);
-      if (!provider) {
+      if (!isEnabledBasis(data.madhhab)) {
         return NextResponse.json(
-          { error: "The selected madhhab is not enabled in this version." },
+          { error: "This version uses the Sunni-majority inheritance basis." },
           { status: 403 },
         );
       }
@@ -42,10 +45,9 @@ export async function POST(request: Request) {
       );
     }
     const data = parsed.data;
-    const provider = getProvider(data.madhhab);
-    if (!provider) {
+    if (!isEnabledBasis(data.madhhab)) {
       return NextResponse.json(
-        { error: "The selected madhhab is not enabled in this version." },
+        { error: "This version uses the Sunni-majority inheritance basis." },
         { status: 403 },
       );
     }

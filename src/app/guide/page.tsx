@@ -3,7 +3,7 @@ import { GuideIndexView } from "@/components/fiqh/guide-index-view";
 
 export const metadata: Metadata = {
   title: "Fiqh Learning Center",
-  description: "Structured Hanafi learning content for Zakah, inheritance and jurisprudence principles.",
+  description: "Structured Hanafi Zakah and Sunni-majority inheritance learning content with jurisprudence principles.",
 };
 
 export default function GuideIndexPage() {

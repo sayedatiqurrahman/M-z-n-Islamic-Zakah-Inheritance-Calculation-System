@@ -17,6 +17,7 @@ datasource db {
 
 enum MadhhabKey {
   HANAFI
+  SUNNI_MAJORITY
   SHAFI
   MALIKI
   HANBALI

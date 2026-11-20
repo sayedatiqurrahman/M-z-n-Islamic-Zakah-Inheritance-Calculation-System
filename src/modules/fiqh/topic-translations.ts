@@ -242,9 +242,9 @@ export const TOPIC_TRANSLATIONS: Record<string, TopicTranslations> = {
       bn: "কুরআনের সূরা আন-নিসারে উত্তরাধিকার নির্ধারিত হয়েছে; সম্পত্তি ধাপে ধাপে সমাধান করা হয় — দাফন-খরচ, ঋণ, বৈধ অসিয়ত, তারপর বণ্টন।",
     },
     ruling: {
-      en: "The Hanafi school has distinctive rules for grandfather with siblings, distant kindred and Radd.",
-      ar: "وللمذهب الحنفي قواعد مميزة لجمع الجد مع الإخوة وذوي الأرحام والرد.",
-      bn: "হানাফি মাজহাবের নিজস্ব নিয়ম আছে — বিশেষত দাদা-সহ-ভাই, দূরবর্তী আত্মীয় এবং রাদ্দ বিষয়ে।",
+      en: "The engine follows the Sunni-majority (Ahl al-Sunnah wa'l-Jamā'ah) sequence and lists classical source kitabs with explicit verification statuses.",
+      ar: "يتبع المحرك تسلسل أهل السنة والجماعة (الرأي الجمهوري) ويعرض كتب المصادر الكلاسيكية مع حالات تحقق صريحة.",
+      bn: "ইঞ্জিন আহলে সুন্নাহ ওয়াল জামাআত (সুন্নি সংখ্যাগরিষ্ঠ) ধাপ অনুসরণ করে এবং ক্লাসিক্যাল উৎস কিতাবসমূহ স্পষ্ট যাচাই অবস্থাসহ দেখায়।"
     },
   },
   "inheritance-causes": {
@@ -348,21 +348,21 @@ export const TOPIC_TRANSLATIONS: Record<string, TopicTranslations> = {
       bn: "কোনো আসাবা (অবশিষ্টাংশী উত্তরাধিকারী) না থাকলে এবং নির্ধারিত অংশ একের কম হলে উদ্বৃত্ত অংশ আনুপাতিকভাবে ফেরত দেওয়া হয়।",
     },
     body: {
-      en: "When fixed shares sum to less than one and there is no residuary heir, the surplus is returned proportionally. The Hanafi treatment of spouses in Radd is flagged for scholar confirmation.",
-      ar: "وإذا كانت مجموع الفروض أقل من الواحد ولم يكن هناك عصب، تُعاد الفائضة نسبيًّا. وتُحدد موقف الزوجين في الرد للمراجعة العلمية.",
-      bn: "নির্ধারিত অংশ একের কম এবং কোনো অবশিষ্টাংশী উত্তরাধিকারী না থাকলে উদ্বৃত্ত অংশ আনুপাতিকভাবে ফেরত দেওয়া হয়। রাদ্দে স্বামী-স্ত্রীর হানাফি অবস্থান আলেমিক নিশ্চয়নের জন্য চিহ্নিত।",
+      en: "When fixed shares sum to less than one and there is no residuary heir, the surplus returns proportionally to quota heirs other than the spouse while another fixed-share heir exists. Spouse-only cases are refused unless a named distant kindred exists.",
+      ar: "وإذا كانت مجموع الفروض أقل من الواحد ولم يكن هناك عصب، تُعاد الفائضة نسبيًّا إلى أصحاب الفروض غير الزوجين عند وجود وارث ذي فرض آخر. وتُرفض الحالات التي يكون فيها الزوج أو الزوجة وحده إلا إذا وُجد قريب رحمي مسمى.",
+      bn: "নির্ধারিত অংশের সমষ্টি একের কম এবং কোনো অবশিষ্টাংশী উত্তরাধিকারী না থাকলে অন্য নির্ধারিত-অংশ উত্তরাধিকারী থাকলে দম্পতি ছাড়া অন্য হিস্যাদারদের মধ্যে উদ্বৃত্ত আনুপাতিকভাবে ফেরত দেওয়া হয়। শুধু স্বামী বা স্ত্রী থাকলে নাম-নির্দিষ্ট দূরবর্তী আত্মীয় ছাড়া ফলাফল প্রত্যাখ্যান করা হয়।"
     },
   },
   "inheritance-grandfather-siblings": {
     definition: {
-      en: "A distinctive and debated Hanafi scenario.",
-      ar: "مشهد حنفي مميز ومناقش.",
-      bn: "একটি বিশেষ ও বিতর্কিত হানাফি ক্ষেত্র।",
+      en: "A debated scenario handled by Zayd ibn Thabit's Sunni-majority method.",
+      ar: "مشهد مختلف فيه يُعالَج بطريقة زيد بن ثابت الجمهورية.",
+      bn: "একটি বিতর্কিত দিক, যা যায়দ ইবন সাবিতের সুন্নি সংখ্যাগরিষ্ঠ পদ্ধতিতে সমাধান করা হয়।"
     },
     body: {
-      en: "The Hanafi rule for a grandfather inheriting alongside siblings is nuanced. The current engine refuses this combination and returns the scholarly-verification message rather than guessing.",
-      ar: "وقد تكن قاعدة الحنفية المميزة لاستحقاق الجد مع الإخوة. ولا يدعم المحرك هذه المجموعة ويعيد الرسالة المطلوبة.",
-      bn: "ভাইদের সঙ্গে দাদার উত্তরাধিকার সংক্রান্ত হানাফি নিয়ম সূক্ষ্ম। বর্তমান ইঞ্জিন এই সমন্বয় সমর্থন করে না এবং অনুমান না করে আলেমিক যাচাইয়ের বার্তা দেয়।",
+      en: "With no other fixed-share heir, the grandfather takes the better of sharing with the siblings as a brother and one third. Cases involving other quota heirs or mixed full and paternal sibling classes are refused rather than guessed.",
+      ar: "عند عدم وجود وارث ذي فرض آخر، يأخذ الجد خيرًا من المشاركة مع الإخوة كأخٍ والثلث. وتُرفض الحالات التي تشمل فروضًا أخرى أو اختلاط الإخوة الأشقاء والإخوة لأب بدلًا من التخمين.",
+      bn: "অন্য কোনো নির্ধারিত-অংশ উত্তরাধিকারী না থাকলে দাদা ভাইয়ের মতো ভাগ বা এক-তৃতীয়াংশ — এর মধ্যে যেটি বেশি তা নেন। অন্য হিস্যাদার বা সহোদর ও পিতৃত্ব-ভাই একসঙ্গে থাকলে অনুমান না করে ফলাফল প্রত্যাখ্যান করা হয়।"
     },
   },
   "inheritance-distant-kindred": {
@@ -372,9 +372,9 @@ export const TOPIC_TRANSLATIONS: Record<string, TopicTranslations> = {
       bn: "দূরবর্তী আত্মীয় যারা নির্ধারিত অংশ বা অবশিষ্টাংশ না থাকলে উত্তরাধিকারী হয়।",
     },
     body: {
-      en: "Distant kindred have detailed Hanafi rules. This category is not yet implemented and is explicitly refused by the engine.",
-      ar: "وذوي الأرحام لديهم قواعد حنفية مفصلة. وهذه الفئة غير منفذة حاليًّا وتُرفض.",
-      bn: "দূরবর্তী আত্মীয়দের জন্য হানাফি নিয়ম রয়েছে; এই বিভাগটি এখনও বাস্তবায়ন করা হয়নি এবং ইঞ্জিন বাদ দেয়।",
+      en: "A single named distant kindred inherits the residue when no closer non-spouse heir, agnatic residuary or quota-heir return remains. More than one unnamed distant kindred is refused because the exact relationship changes the split.",
+      ar: "يرث قريب رحمي واحد مسمى الباقي عند عدم وجود وارث أقرب غير الزوجين، ولا عصب، ولا رد على أصحاب الفروض. ويُرفض أكثر من قريب رحمي غير مسمى لأن القرابة الدقيقة تغيّر التوزيع.",
+      bn: "কোনো নিকটতর অ-দম্পতি উত্তরাধিকারী, আসাবা বা হিস্যাদারদের প্রত্যাবর্তন না থাকলে একজন নাম-নির্দিষ্ট দূরবর্তী আত্মীয় অবশিষ্টাংশ পান। একাধিক অনির্দিষ্ট দূরবর্তী আত্মীয় প্রত্যাখ্যান করা হয়, কারণ নির্দিষ্ট সম্পর্ক ভাগ পরিবর্তন করে।"
     },
   },
   "inheritance-wasiyyah": {
@@ -409,9 +409,9 @@ export const TOPIC_TRANSLATIONS: Record<string, TopicTranslations> = {
       bn: "এমন পদ্ধতি যার মাধ্যমে প্রমাণ থেকে আহকাম (বিধান) উদ্ভাবন করা হয়।",
     },
     body: {
-      en: "Usul al-fiqh studies the sources and methods of deriving rulings. This application does not derive new rulings; it encodes rules already documented in the Hanafi tradition and marks their verification status.",
-      ar: "والأصول الفقهية تدرس مصادر وطرق استنتاج الأحكام. والتطبيق لا يستنتج أحكامًا جديدة بل يحفظ أحكامًا سابقًا موثقة في المذهب الحنفي مع حالتها.",
-      bn: "উসুল আল-ফিকহ উৎস ও বিধান উদ্ভাবনের পদ্ধতি আলোচনা করে। এই অ্যাপ্লিকেশন নতুন বিধান উদ্ভাবন করে না; বরং হানাফি ঐতিহ্যে নথিভুক্ত বিধান সংকেতবদ্ধ করে এবং তাদের যাচাই অবস্থা চিহ্নিত করে।",
+      en: "Usul al-fiqh studies the sources and methods of deriving rulings. This application does not derive new rulings; it encodes documented Hanafi zakah rules and Sunni-majority inheritance rules, each with an explicit verification status.",
+      ar: "تدرس أصول الفقه مصادر الأحكام وطرائق استنباطها. لا يستنبط التطبيق أحكامًا جديدة؛ بل يرمّز قواعد الزكاة الحنفية الموثّقة وقواعد الميراث الجمهورية، ولكل منها حالة تحقق صريحة.",
+      bn: "উসুল আল-ফিকহ উৎস ও বিধান উদ্ভাবনের পদ্ধতি আলোচনা করে। এই অ্যাপ্লিকেশন নতুন বিধান উদ্ভাবন করে না; এটি নথিভুক্ত হানাফি যাকাত নিয়ম ও সুন্নি সংখ্যাগরিষ্ঠ উত্তরাধিকার নিয়ম সংকেতবদ্ধ করে, প্রতিটির স্পষ্ট যাচাই অবস্থাসহ।"
     },
   },
   "principles-evidence": {
@@ -433,9 +433,9 @@ export const TOPIC_TRANSLATIONS: Record<string, TopicTranslations> = {
       bn: "স্বীকৃত সুন্নি ফিকহি মাজহাবসমূহ।",
     },
     body: {
-      en: "The Hanafi, Shafi'i, Maliki and Hanbali schools share core sources but differ in details. Mīzān implements Hanafi only in v1 and never silently applies Hanafi rules while claiming another school. The provider architecture allows future expansion.",
-      ar: "وتشترك المذاهب الأربعة في المصادر الأساسية لكنها تختلف في التفاصيل. ويطبق التطبيق المنهج الحنفي فقط في النسخة الأولى.",
-      bn: "হানাফি, শাফিঈ, মালিকি ও হাম্বলি — এই চারটি সুন্নি মাজহাব মূল উৎসে একমত হলেও বিস্তারিত বিধানে ভিন্ন। মীজান সংস্করণ ১-এ কেবল হানাফি মাজহাব প্রয়োগ করে এবং অন্য মাজহাবের দাবি করে নীরবে হানাফি নিয়ম প্রয়োগ করে না।",
+      en: "The Hanafi, Shafi'i, Maliki and Hanbali schools share core sources but differ in details. Mīzān applies Hanafi rules to Zakah and a declared Ahl al-Sunnah wa'l-Jamā'ah / Sunni-majority methodology to inheritance. It never silently applies a single-school rule while claiming another basis; disputed inheritance configurations are refused.",
+      ar: "تتشترك المذاهب الحنفي والشافعي والمالكي والحنبلي في المصادر الأساسية ولكنها تختلف في التفاصيل. يطبّق ميزان القواعد الحنفية على الزكاة ومنهجية أهل السنة والجماعة (الرأي الجمهوري) المعلنة على الميراث. ولا يطبّق قاعدة مذهب واحد بصمت وهو يدّعي أساسًا آخر؛ وتُرفض صور الميراث المتنازع عليها.",
+      bn: "হানাফি, শাফিঈ, মালিকি ও হাম্বলি মাজহাব মূল উৎসে একমত হলেও বিস্তারিত বিধানে ভিন্ন। মীজান যাকাতে হানাফি নিয়ম এবং উত্তরাধিকারে ঘোষিত আহলে সুন্নাহ ওয়াল জামাআত / সুন্নি সংখ্যাগরিষ্ঠ পদ্ধতি প্রয়োগ করে। অন্য ভিত্তির দাবি করে কোনো একক মাজহাবের নিয়ম চুপচাপ প্রয়োগ করা হয় না; বিতর্কিত উত্তরাধিকার সমন্বয় প্রত্যাখ্যান করা হয়।"
     },
   },
 };

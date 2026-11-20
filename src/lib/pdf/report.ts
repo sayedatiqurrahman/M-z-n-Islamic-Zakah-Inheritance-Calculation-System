@@ -50,7 +50,7 @@ export async function buildPdfReport(data: ReportData): Promise<Uint8Array> {
 
   pdf.setTitle(data.title);
   pdf.setAuthor("Mizan - Sayed Atiqur Rahman (IIUC)");
-  pdf.setSubject("Academic Hanafi Zakah & Inheritance calculation report");
+  pdf.setSubject("Academic Zakah & Inheritance calculation report");
   pdf.setCreator("Mizan v1.0.0");
 
   let cursor: Cursor = { page: pdf.addPage([PAGE_WIDTH, PAGE_HEIGHT]), y: PAGE_HEIGHT - MARGIN };
@@ -180,7 +180,7 @@ export async function buildPdfReport(data: ReportData): Promise<Uint8Array> {
       font: body,
       color: MUTED,
     });
-    page.drawText("mizan · hanafi-v1.0.0", {
+    page.drawText("mizan · academic calculation", {
       x: MARGIN,
       y: MARGIN - 20,
       size: 8,

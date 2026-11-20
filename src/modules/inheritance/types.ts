@@ -1,4 +1,6 @@
-import type { CalculationStepData, UnsupportedResult } from "@/modules/fiqh/types";
+import type { CalculationStepData, EvidenceReference, UnsupportedResult } from "@/modules/fiqh/types";
+
+export type InheritanceMadhhab = "HANAFI" | "SUNNI_MAJORITY";
 
 export type HeirType =
   | "HUSBAND"
@@ -31,7 +33,7 @@ export interface HeirInput {
 }
 
 export interface InheritanceCalculationInput {
-  madhhab: "HANAFI";
+  madhhab: InheritanceMadhhab;
   methodologyVersion: string;
   currency: string;
   deceasedGender: "MALE" | "FEMALE";
@@ -79,7 +81,7 @@ export interface HeirOutcome {
   explanation: string;
 }
 
-export type AdjustmentType = "NONE" | "AWL" | "RADD";
+export type AdjustmentType = "NONE" | "AWL" | "RADD" | "DISTANT_KINDRED";
 
 export interface TashihPart {
   type: HeirType;
@@ -98,8 +100,12 @@ export interface TashihResult {
 
 export interface InheritanceCalculationResult {
   supported: true;
-  madhhab: "HANAFI";
+  madhhab: InheritanceMadhhab;
   methodologyVersion: string;
+  /** Explicit name of the Sunni-majority basis used for every supported case. */
+  methodologyBasis: "SUNNI_MAJORITY";
+  /** Classical kitabs behind the encoded methodology, with verification states. */
+  sources: EvidenceReference[];
   currency: string;
   grossEstate: number;
   funeralExpenses: number;
@@ -136,7 +142,7 @@ export interface MunasakhaDeceasedInput
 }
 
 export interface MunasakhaCalculationInput {
-  madhhab: "HANAFI";
+  madhhab: InheritanceMadhhab;
   methodologyVersion: string;
   currency: string;
   deceased: MunasakhaDeceasedInput[];
@@ -157,8 +163,10 @@ export interface MunasakhaCaseResult {
 
 export interface MunasakhaCalculationResult {
   supported: true;
-  madhhab: "HANAFI";
+  madhhab: InheritanceMadhhab;
   methodologyVersion: string;
+  methodologyBasis: "SUNNI_MAJORITY";
+  sources: EvidenceReference[];
   currency: string;
   cases: MunasakhaCaseResult[];
   /** Total net estate of every case, including amounts inherited from earlier cases. */

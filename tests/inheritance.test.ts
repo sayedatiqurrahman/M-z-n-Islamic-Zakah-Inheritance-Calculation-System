@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { calculateInheritance, calculateMunasakha } from "@/modules/inheritance/engine";
 import type { InheritanceCalculationInput, HeirType, MunasakhaCalculationInput } from "@/modules/inheritance/types";
-import { INHERITANCE_METHODOLOGY_VERSION } from "@/modules/inheritance/rules";
+import {
+  INHERITANCE_METHODOLOGY_VERSION,
+  INHERITANCE_SOURCE_BOOKS,
+} from "@/modules/inheritance/rules";
 
 const base: InheritanceCalculationInput = {
-  madhhab: "HANAFI",
+  madhhab: "SUNNI_MAJORITY",
   methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
   currency: "BDT",
   deceasedGender: "MALE",
@@ -27,7 +30,32 @@ function share(result: ReturnType<typeof calculateInheritance>, type: HeirType) 
   return result.outcomes.find((o) => o.type === type && o.status === "ELIGIBLE");
 }
 
-describe("Hanafi inheritance engine", () => {
+function excludedBy(result: ReturnType<typeof calculateInheritance>, type: HeirType) {
+  if (!result.supported) return null;
+  return result.outcomes.find((o) => o.type === type && o.status === "EXCLUDED") ?? null;
+}
+
+describe("Sunni-majority inheritance engine", () => {
+  it("declares the Sunni-majority basis, version and source kitabs", () => {
+    const result = calculateInheritance({ ...base, heirs: heirs(["SON", 1]) });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.madhhab).toBe("SUNNI_MAJORITY");
+    expect(result.methodologyBasis).toBe("SUNNI_MAJORITY");
+    expect(result.methodologyVersion).toBe("sunni-majority-all-heirs-v2.0.0");
+    expect(INHERITANCE_METHODOLOGY_VERSION).toBe("sunni-majority-all-heirs-v2.0.0");
+    expect(result.sources).toEqual(INHERITANCE_SOURCE_BOOKS);
+    expect(result.sources.map((source) => source.id)).toEqual([
+      "CLASSICAL_SIRAJIYYAH",
+      "CLASSICAL_HIDAYAH",
+      "CLASSICAL_HINDIYYAH",
+      "CLASSICAL_AL_MUGHNI",
+      "CLASSICAL_AL_MAJMU",
+    ]);
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(result.sources.every((source) => source.verificationStatus !== undefined)).toBe(true);
+  });
+
   it("husband with two daughters and mother applies Awl (13/12)", () => {
     const result = calculateInheritance({
       ...base,
@@ -85,11 +113,14 @@ describe("Hanafi inheritance engine", () => {
     expect(brother?.explanation).toContain("excluded");
   });
 
-  it("father excludes paternal grandfather", () => {
-    const result = calculateInheritance({ ...base, heirs: heirs(["FATHER", 1], ["PATERNAL_GRANDFATHER", 1]) });
-    const grandfather = result.supported ? result.outcomes.find((o) => o.type === "PATERNAL_GRANDFATHER") : null;
-    expect(grandfather?.status).toBe("EXCLUDED");
-    expect(grandfather?.excludedBy).toBe("FATHER");
+  it("father excludes paternal grandfather and lower collaterals", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["FATHER", 1], ["PATERNAL_GRANDFATHER", 1], ["FULL_BROTHER", 1]),
+    });
+    expect(excludedBy(result, "PATERNAL_GRANDFATHER")?.excludedBy).toBe("FATHER");
+    expect(excludedBy(result, "FULL_BROTHER")?.excludedBy).toBe("FATHER");
+    expect(share(result, "FATHER")?.fraction).toEqual({ numerator: "1", denominator: "1" });
   });
 
   it("four wives share 1/8 with a son", () => {
@@ -127,20 +158,6 @@ describe("Hanafi inheritance engine", () => {
     expect(result.netDistributable).toBe(600000);
   });
 
-  it("refuses distant kindred", () => {
-    const result = calculateInheritance({ ...base, heirs: heirs(["DISTANT_KINDRED", 1]) });
-    expect(result.supported).toBe(false);
-    if (!result.supported) expect(result.reason).toContain("scholarly verification");
-  });
-
-  it("refuses grandfather with siblings", () => {
-    const result = calculateInheritance({
-      ...base,
-      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["FULL_BROTHER", 1]),
-    });
-    expect(result.supported).toBe(false);
-  });
-
   it("distributes amounts summing exactly to the net estate", () => {
     const result = calculateInheritance({
       ...base,
@@ -156,7 +173,187 @@ describe("Hanafi inheritance engine", () => {
   });
 });
 
-describe("Hanafi heir input guards", () => {
+describe("Sunni-majority extended heirs", () => {
+  it("sole distant kindred takes the residue", () => {
+    const result = calculateInheritance({ ...base, heirs: heirs(["DISTANT_KINDRED", 1]) });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.adjustment).toBe("NONE");
+    expect(share(result, "DISTANT_KINDRED")?.fraction).toEqual({ numerator: "1", denominator: "1" });
+    expect(share(result, "DISTANT_KINDRED")?.referenceIds).toContain("INH-DISTANT-KINDRED");
+  });
+
+  it("spouse and distant kindred divide the estate equally", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["HUSBAND", 1], ["DISTANT_KINDRED", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(share(result, "HUSBAND")?.fraction).toEqual({ numerator: "1", denominator: "2" });
+    expect(share(result, "DISTANT_KINDRED")?.fraction).toEqual({ numerator: "1", denominator: "2" });
+  });
+
+  it("a closer non-spouse heir excludes distant kindred before Radd is applied", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["DAUGHTER", 1], ["DISTANT_KINDRED", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(excludedBy(result, "DISTANT_KINDRED")?.excludedBy).toBe("DAUGHTER");
+    expect(share(result, "DAUGHTER")?.fraction).toEqual({ numerator: "1", denominator: "1" });
+  });
+
+  it("refuses more than one generic distant kindred", () => {
+    const result = calculateInheritance({ ...base, heirs: heirs(["DISTANT_KINDRED", 2]) });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("logical maximum");
+  });
+
+  it("applies Zayd's sharing method when it is more favourable than one third", () => {
+    const oneBrother = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["FULL_BROTHER", 1]),
+    });
+    expect(oneBrother.supported).toBe(true);
+    if (oneBrother.supported) {
+      expect(share(oneBrother, "PATERNAL_GRANDFATHER")?.fraction).toEqual({ numerator: "1", denominator: "2" });
+      expect(share(oneBrother, "FULL_BROTHER")?.fraction).toEqual({ numerator: "1", denominator: "2" });
+    }
+
+    const oneSister = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["FULL_SISTER", 1]),
+    });
+    expect(oneSister.supported).toBe(true);
+    if (oneSister.supported) {
+      expect(share(oneSister, "PATERNAL_GRANDFATHER")?.fraction).toEqual({ numerator: "2", denominator: "3" });
+      expect(share(oneSister, "FULL_SISTER")?.fraction).toEqual({ numerator: "1", denominator: "3" });
+    }
+  });
+
+  it("gives the grandfather one third when sharing would give less", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["FULL_BROTHER", 3]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(share(result, "PATERNAL_GRANDFATHER")?.fraction).toEqual({ numerator: "1", denominator: "3" });
+    expect(share(result, "FULL_BROTHER")?.fraction).toEqual({ numerator: "2", denominator: "3" });
+    expect(share(result, "PATERNAL_GRANDFATHER")?.referenceIds).toContain("INH-GRANDFATHER-SIBLINGS");
+  });
+
+  it("refuses disputed grandfather cases with other quota heirs", () => {
+    const withDaughter = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["DAUGHTER", 1], ["FULL_BROTHER", 1]),
+    });
+    expect(withDaughter.supported).toBe(false);
+    if (!withDaughter.supported) expect(withDaughter.reason).toContain("scholarly verification");
+
+    const withMother = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["MOTHER", 1], ["FULL_SISTER", 1]),
+    });
+    expect(withMother.supported).toBe(false);
+    if (!withMother.supported) expect(withMother.reason).toContain("scholarly verification");
+  });
+
+  it("paternal grandfather excludes maternal siblings", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["PATERNAL_GRANDFATHER", 1], ["MATERNAL_BROTHER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(excludedBy(result, "MATERNAL_BROTHER")?.excludedBy).toBe("PATERNAL_GRANDFATHER");
+    expect(share(result, "PATERNAL_GRANDFATHER")?.fraction).toEqual({ numerator: "1", denominator: "1" });
+  });
+
+  it("a full brother excludes paternal half-siblings", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["FULL_BROTHER", 1], ["PATERNAL_SISTER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(excludedBy(result, "PATERNAL_SISTER")?.excludedBy).toBe("FULL_BROTHER");
+    expect(share(result, "FULL_BROTHER")?.fraction).toEqual({ numerator: "1", denominator: "1" });
+  });
+
+  it("one full sister completes one paternal sister at 1/6 before Radd", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["FULL_SISTER", 1], ["PATERNAL_SISTER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.adjustment).toBe("RADD");
+    expect(share(result, "FULL_SISTER")?.fraction).toEqual({ numerator: "3", denominator: "4" });
+    expect(share(result, "PATERNAL_SISTER")?.fraction).toEqual({ numerator: "1", denominator: "4" });
+  });
+
+  it("two full sisters exclude a paternal sister unless a paternal brother is present", () => {
+    const withoutPaternalBrother = calculateInheritance({
+      ...base,
+      heirs: heirs(["FULL_SISTER", 2], ["PATERNAL_SISTER", 1]),
+    });
+    expect(excludedBy(withoutPaternalBrother, "PATERNAL_SISTER")?.excludedBy).toBe("FULL_SISTER");
+
+    const withPaternalBrother = calculateInheritance({
+      ...base,
+      heirs: heirs(["FULL_SISTER", 2], ["PATERNAL_BROTHER", 1], ["PATERNAL_SISTER", 1]),
+    });
+    expect(excludedBy(withPaternalBrother, "PATERNAL_SISTER")).toBeNull();
+  });
+
+  it("son's son and son's daughter divide as 2:1 when no daughter exists", () => {
+    const result = calculateInheritance({
+      ...base,
+      heirs: heirs(["SONS_SON", 1], ["SONS_DAUGHTER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(share(result, "SONS_SON")?.fraction).toEqual({ numerator: "2", denominator: "3" });
+    expect(share(result, "SONS_DAUGHTER")?.fraction).toEqual({ numerator: "1", denominator: "3" });
+  });
+
+  it("supports brothers' sons, uncles and other agnatic residuaries by rank", () => {
+    const categories: HeirType[] = [
+      "FULL_BROTHERS_SON",
+      "PATERNAL_BROTHERS_SON",
+      "FULL_PATERNAL_UNCLE",
+      "PATERNAL_UNCLE",
+      "OTHER_AGNATIC",
+    ];
+    for (const type of categories) {
+      const result = calculateInheritance({ ...base, heirs: heirs([type, 1]) });
+      expect(result.supported, `${type} should be supported`).toBe(true);
+      if (result.supported) {
+        expect(share(result, type)?.fraction).toEqual({ numerator: "1", denominator: "1" });
+      }
+    }
+
+    const ranked = calculateInheritance({
+      ...base,
+      heirs: heirs(["FULL_BROTHER", 1], ["FULL_BROTHERS_SON", 1]),
+    });
+    expect(excludedBy(ranked, "FULL_BROTHERS_SON")?.excludedBy).toBe("FULL_BROTHER");
+  });
+
+  it("refuses more than one generic nephew or uncle", () => {
+    for (const type of ["FULL_BROTHERS_SON", "PATERNAL_BROTHERS_SON", "FULL_PATERNAL_UNCLE", "PATERNAL_UNCLE", "OTHER_AGNATIC"] as HeirType[]) {
+      const result = calculateInheritance({ ...base, heirs: heirs([type, 2]) });
+      expect(result.supported, `${type} count should be refused`).toBe(false);
+      if (!result.supported) expect(result.reason).toContain("logical maximum");
+    }
+  });
+});
+
+describe("Heir input guards", () => {
   it("refuses more than one husband", () => {
     const result = calculateInheritance({
       ...base,
@@ -302,7 +499,7 @@ describe("Munasakha (multiple deceased)", () => {
 
   it("passes an inherited share into the next estate and avoids double counting", () => {
     const result = calculateMunasakha({
-      madhhab: "HANAFI",
+      madhhab: "SUNNI_MAJORITY",
       methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
       currency: "BDT",
       deceased: [
@@ -327,7 +524,7 @@ describe("Munasakha (multiple deceased)", () => {
 
   it("chains more than two deceased in sequence", () => {
     const result = calculateMunasakha({
-      madhhab: "HANAFI",
+      madhhab: "SUNNI_MAJORITY",
       methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
       currency: "BDT",
       deceased: [
@@ -353,7 +550,7 @@ describe("Munasakha (multiple deceased)", () => {
 
   it("refuses a link to a non-eligible heir", () => {
     const result = calculateMunasakha({
-      madhhab: "HANAFI",
+      madhhab: "SUNNI_MAJORITY",
       methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
       currency: "BDT",
       deceased: [
@@ -370,7 +567,7 @@ describe("Munasakha (multiple deceased)", () => {
 
   it("refuses a link that references a later deceased", () => {
     const result = calculateMunasakha({
-      madhhab: "HANAFI",
+      madhhab: "SUNNI_MAJORITY",
       methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
       currency: "BDT",
       deceased: [

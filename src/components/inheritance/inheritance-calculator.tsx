@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Calculator, ChevronRight, CircleAlert, Download, Loader2, Minus, Plus, Save, UserPlus, UserMinus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { inheritanceRequestSchema, munasakhaRequestSchema, type InheritanceRequest } from "@/modules/inheritance/schemas";
+import { calculateInheritance } from "@/modules/inheritance/engine";
 import { HEIR_MAX_COUNTS, INHERITANCE_METHODOLOGY_VERSION } from "@/modules/inheritance/rules";
 import type { HeirType, InheritanceCalculationResult, MunasakhaCalculationResult } from "@/modules/inheritance/types";
 import { formatAmount, isCurrencyCode } from "@/lib/formatting";
 import { CalculationSteps } from "@/components/shared/calculation-steps";
+import { ReferenceTooltip } from "@/components/shared/reference-tooltip";
 import { CurrencyCombobox } from "@/components/currency/currency-combobox";
 import { useLocale } from "@/components/layout/locale-provider";
 import { InheritanceChart } from "./inheritance-chart";
@@ -30,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 type EstateForm = Omit<InheritanceRequest, "heirs">;
 
 const defaultValues: EstateForm = {
-  madhhab: "HANAFI",
+  madhhab: "SUNNI_MAJORITY",
   methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
   currency: "BDT",
   deceasedGender: "MALE",
@@ -96,6 +98,30 @@ export function InheritanceCalculator() {
   // eslint-disable-next-line react-hooks/incompatible-library -- RHF's watch() is required for reactive form values.
   const currency = watch("currency");
   const deceasedGender = watch("deceasedGender") as "MALE" | "FEMALE";
+  const watchedValues = useWatch({ control: form.control }) as EstateForm;
+
+  /** Pure client-side preview used only for inline nisab labels and tooltips. */
+  const buildPreview = (
+    heirCounts: Partial<Record<HeirType, number>>,
+    gender: "MALE" | "FEMALE",
+    estate: Partial<EstateForm> = {},
+  ) => {
+    const heirList = Object.entries(heirCounts)
+      .filter(([, count]) => (count ?? 0) > 0)
+      .map(([type, count]) => ({ type: type as HeirType, count: count ?? 0 }));
+    if (heirList.length === 0) return null;
+    const parsed = inheritanceRequestSchema.safeParse({
+      ...watchedValues,
+      ...estate,
+      deceasedGender: gender,
+      heirs: heirList,
+    });
+    if (!parsed.success) return null;
+    const preview = calculateInheritance(parsed.data);
+    return preview.supported ? preview : null;
+  };
+
+  const previewResult = mode === "SINGLE" ? buildPreview(counts, deceasedGender) : null;
 
   useEffect(() => {
     const storedCurrency = window.localStorage.getItem("mizan-currency");
@@ -482,6 +508,7 @@ export function InheritanceCalculator() {
                                 deceasedGender={deceasedGender}
                                 counts={counts}
                                 onAdjust={adjust}
+                                preview={previewResult}
                                 t={t}
                               />
                             );
@@ -592,6 +619,7 @@ export function InheritanceCalculator() {
                             deceasedGender={deceased.deceasedGender}
                             counts={deceased.counts}
                             onAdjust={(type, delta) => adjustDeceased(deceased.id, type, delta, deceased.deceasedGender)}
+                            preview={buildPreview(deceased.counts, deceased.deceasedGender, deceased)}
                             t={t}
                             locale={locale}
                           />
@@ -702,12 +730,14 @@ function HeirPicker({
   deceasedGender,
   counts,
   onAdjust,
+  preview,
   t,
   locale,
 }: {
   deceasedGender: "MALE" | "FEMALE";
   counts: Partial<Record<HeirType, number>>;
   onAdjust: (type: HeirType, delta: number) => void;
+  preview: InheritanceCalculationResult | null;
   t: (key: string, vars?: Record<string, string | number>) => string;
   locale: "en" | "ar" | "bn";
 }) {
@@ -728,6 +758,7 @@ function HeirPicker({
                 deceasedGender={deceasedGender}
                 counts={counts}
                 onAdjust={onAdjust}
+                preview={preview}
                 t={t}
               />
             ))}
@@ -747,6 +778,7 @@ function HeirRow({
   deceasedGender,
   counts,
   onAdjust,
+  preview,
   t,
 }: {
   type: HeirType;
@@ -757,6 +789,7 @@ function HeirRow({
   deceasedGender: "MALE" | "FEMALE";
   counts: Partial<Record<HeirType, number>>;
   onAdjust: (type: HeirType, delta: number) => void;
+  preview: InheritanceCalculationResult | null;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   const applicable =
@@ -774,12 +807,33 @@ function HeirRow({
     ? affectedTypes.map((candidate) => heirLabel(candidate, locale)).join(", ")
     : t("common.none");
 
+  const previewOutcome = preview?.outcomes.find((outcome) => outcome.type === type) ?? null;
+  const fractionOf = (fraction?: { numerator: string; denominator: string }) =>
+    fraction ? `${fraction.numerator}/${fraction.denominator}` : null;
+  const groupShare = fractionOf(previewOutcome?.fraction);
+  const individualShare = fractionOf(previewOutcome?.perIndividualFraction);
+  const previewNote = previewOutcome
+    ? previewOutcome.status === "EXCLUDED"
+      ? t("inheritance.excludedPreview")
+      : previewOutcome.status === "ELIGIBLE" && !groupShare
+        ? t("inheritance.previewUnavailable")
+        : null
+    : t("inheritance.previewUnavailable");
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className={cn("flex items-center justify-between gap-2 rounded-lg border p-2.5", count > 0 ? "border-emerald-300 bg-emerald-50/50" : "border-slate-200")}>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{label}</p>
+            <p className="truncate text-sm font-medium">
+              {label}
+              {count > 0 && groupShare ? (
+                <Badge variant="secondary" className="ms-1 font-mono text-[10px]">{groupShare}</Badge>
+              ) : null}
+            </p>
+            {count > 0 && previewOutcome?.status === "EXCLUDED" ? (
+              <span className="text-[10px] text-amber-700">{t("inheritance.excludedPreview")}</span>
+            ) : null}
             {!supported ? <span className="text-[10px] text-amber-700">{t("inheritance.requiresVerification")}</span> : null}
           </div>
           <div className="flex items-center gap-1">
@@ -796,6 +850,15 @@ function HeirRow({
       <TooltipContent side="top" className="max-w-64">
         <div className="space-y-1">
           <p className="text-xs font-semibold">{t("inheritance.nasab", { name: label })}</p>
+          {groupShare ? (
+            <p className="font-mono text-xs">{t("inheritance.shareGroup", { value: groupShare })}</p>
+          ) : null}
+          {individualShare ? (
+            <p className="font-mono text-xs">{t("inheritance.shareEach", { value: individualShare })}</p>
+          ) : null}
+          {count > 0 && previewNote ? (
+            <p className="text-xs text-amber-700">{previewNote}</p>
+          ) : null}
           <p className="text-xs text-muted-foreground">{t("inheritance.nasabImpact", { name: label, names: affectedNames })}</p>
         </div>
       </TooltipContent>
@@ -833,7 +896,13 @@ function InheritanceResultView({
         ? t("inheritance.partial")
         : t("common.none");
   const adjustmentLabel = (value: string) =>
-    value === "AWL" ? t("inheritance.awl") : value === "RADD" ? t("inheritance.radd") : t("common.none");
+    value === "AWL"
+      ? t("inheritance.awl")
+      : value === "RADD"
+        ? t("inheritance.radd")
+        : value === "DISTANT_KINDRED"
+          ? t("inheritance.distantKindred")
+          : t("common.none");
   const fractionLabel = (o: { fraction?: { numerator: string; denominator: string }; perIndividualFraction?: { numerator: string; denominator: string } }) =>
     o.perIndividualFraction
       ? `${o.perIndividualFraction.numerator}/${o.perIndividualFraction.denominator}`
@@ -854,11 +923,28 @@ function InheritanceResultView({
         <CardContent>
           <p className="text-3xl font-bold text-emerald-900">{formatAmount(result.netDistributable, result.currency, locale)}</p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant="outline">{t("inheritance.basisLabel", { value: result.methodologyBasis === "SUNNI_MAJORITY" ? t("common.sunniMajority") : t("common.hanafi") })}</Badge>
             <Badge variant="outline">{t("inheritance.adjustment", { value: adjustmentLabel(result.adjustment) })}</Badge>
             <Badge variant="outline">{t("inheritance.baseDenominator", { value: String(result.baseDenominator) })}</Badge>
           </div>
         </CardContent>
       </Card>
+
+      {result.sources.length > 0 ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("inheritance.sourcesTitle")}</CardTitle>
+            <CardDescription>{t("inheritance.sourcesDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {result.sources.map((source) => (
+              <ReferenceTooltip key={source.id} reference={source}>
+                <Badge variant="outline" className="cursor-help">{source.label}</Badge>
+              </ReferenceTooltip>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">{t("inheritance.settlement")}</CardTitle></CardHeader>

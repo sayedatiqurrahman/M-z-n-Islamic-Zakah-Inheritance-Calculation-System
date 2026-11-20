@@ -44,7 +44,7 @@ export default function HomeView() {
       <section className="islamic-pattern overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-white via-emerald-50/60 to-white p-6 dark:border-emerald-500/20 dark:from-card dark:via-emerald-500/10 dark:to-card md:p-10">
         <div className="max-w-3xl space-y-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="bg-emerald-700 text-white hover:bg-emerald-700">{t("common.hanafiVersion")}</Badge>
+            <Badge className="bg-emerald-700 text-white hover:bg-emerald-700">{t("common.methodologyBadge")}</Badge>
             <Badge variant="outline" className="border-emerald-200 bg-white/70 text-emerald-800">
               {t("home.badge.academic")}
             </Badge>

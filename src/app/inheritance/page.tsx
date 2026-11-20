@@ -4,7 +4,7 @@ import { InheritancePageView } from "@/components/inheritance/inheritance-page-v
 export const metadata: Metadata = {
   title: "Inheritance Calculator",
   description:
-    "Hanafi Fara'id calculator with exact rational arithmetic, exclusion analysis, Awl and Radd.",
+    "Sunni-majority Fara'id calculator for all catalogued heirs with exact rational arithmetic, source kitabs, exclusion analysis, Awl, Radd and Tashih.",
 };
 
 export default function InheritancePage() {

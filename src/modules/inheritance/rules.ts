@@ -1,17 +1,23 @@
 import { EVIDENCE } from "@/modules/fiqh/evidences/catalog";
-import type { RuleReference } from "@/modules/fiqh/types";
+import type { EvidenceReference, RuleReference } from "@/modules/fiqh/types";
 import type { HeirType } from "./types";
 
-export const INHERITANCE_METHODOLOGY_VERSION = "hanafi-inheritance-v1.0.0";
+export const INHERITANCE_METHODOLOGY_VERSION = "sunni-majority-all-heirs-v2.0.0";
 
-/** Heir categories not yet backed by a verified rule in this engine. */
-export const UNSUPPORTED_HEIR_TYPES: HeirType[] = [
-  "DISTANT_KINDRED",
-  "OTHER_AGNATIC",
-  "PATERNAL_UNCLE",
-  "FULL_PATERNAL_UNCLE",
-  "FULL_BROTHERS_SON",
-  "PATERNAL_BROTHERS_SON",
+/**
+ * All catalogued heir categories now have an encoded rule. A generic category
+ * can still be refused contextually when its exact relationship is ambiguous
+ * (for example, more than one unnamed distant kindred).
+ */
+export const UNSUPPORTED_HEIR_TYPES: HeirType[] = [];
+
+/** Classical kitabs used for the Sunni-majority methodology, with honest verification states. */
+export const INHERITANCE_SOURCE_BOOKS: EvidenceReference[] = [
+  EVIDENCE.CLASSICAL_SIRAJIYYAH!,
+  EVIDENCE.CLASSICAL_HIDAYAH!,
+  EVIDENCE.CLASSICAL_HINDIYYAH!,
+  EVIDENCE.CLASSICAL_AL_MUGHNI!,
+  EVIDENCE.CLASSICAL_AL_MAJMU!,
 ];
 
 /**
@@ -37,12 +43,12 @@ export const HEIR_MAX_COUNTS: Record<HeirType, number> = {
   PATERNAL_SISTER: 20,
   MATERNAL_BROTHER: 20,
   MATERNAL_SISTER: 20,
-  FULL_BROTHERS_SON: 20,
-  PATERNAL_BROTHERS_SON: 20,
-  PATERNAL_UNCLE: 20,
-  FULL_PATERNAL_UNCLE: 20,
-  OTHER_AGNATIC: 20,
-  DISTANT_KINDRED: 20,
+  FULL_BROTHERS_SON: 1,
+  PATERNAL_BROTHERS_SON: 1,
+  PATERNAL_UNCLE: 1,
+  FULL_PATERNAL_UNCLE: 1,
+  OTHER_AGNATIC: 1,
+  DISTANT_KINDRED: 1,
 };
 
 export const INHERITANCE_RULES: Record<string, RuleReference> = {
@@ -62,6 +68,21 @@ export const INHERITANCE_RULES: Record<string, RuleReference> = {
     verificationStatus: "NEEDS_REVIEW",
     evidence: [EVIDENCE.HADITH_NO_BEQUEST_TO_HEIR, EVIDENCE.CLASSICAL_HIDAYAH],
     note: "Consent timing and bequests to heirs require scholar confirmation.",
+  },
+  "INH-SUNNI-BASIS": {
+    ruleId: "INH-SUNNI-BASIS",
+    title: "Ahl al-Sunnah wa'l-Jamā'ah basis",
+    principle:
+      "The Sunni-majority sequence is fixed-share heirs, then agnatic residuaries, then Radd, then distant kindred, then the public treasury.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [
+      EVIDENCE.CLASSICAL_SIRAJIYYAH!,
+      EVIDENCE.CLASSICAL_HIDAYAH!,
+      EVIDENCE.CLASSICAL_AL_MUGHNI!,
+      EVIDENCE.CLASSICAL_AL_MAJMU!,
+    ],
+    note:
+      "This is the working basis of Ahl al-Sunnah wa'l-Jamā'ah, not a fatwa. Exact editions and school-by-school differences still require scholar verification.",
   },
   "INH-SPOUSE": {
     ruleId: "INH-SPOUSE",
@@ -94,9 +115,11 @@ export const INHERITANCE_RULES: Record<string, RuleReference> = {
   "INH-SIBLINGS": {
     ruleId: "INH-SIBLINGS",
     title: "Sibling shares",
-    principle: "Full, paternal and maternal siblings have distinct fixed shares and residuary roles under Hanafi rules.",
+    principle:
+      "Full siblings take precedence over paternal siblings; a lone full sister completes paternal sisters at 1/6, while maternal siblings keep their Qur'anic share and are not excluded by a full or paternal brother.",
     verificationStatus: "NEEDS_REVIEW",
-    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH],
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH!, EVIDENCE.CLASSICAL_AL_MUGHNI!],
+    note: "The completing 1/6 rule and precedence between sibling classes are recorded from the classical manuals; verify the cited edition before reliance.",
   },
   "INH-EXCLUSION-COMPLETE": {
     ruleId: "INH-EXCLUSION-COMPLETE",
@@ -115,9 +138,27 @@ export const INHERITANCE_RULES: Record<string, RuleReference> = {
   "INH-ASABAH": {
     ruleId: "INH-ASABAH",
     title: "Residuary heirs (العصبات)",
-    principle: "Residuary heirs receive the remainder after fixed shares; male and female agnates inherit in the prescribed ratio.",
+    principle: "Residuary heirs receive the remainder after fixed shares; male and female agnates inherit in the prescribed 2:1 ratio.",
     verificationStatus: "REFERENCE_REQUIRED",
-    evidence: [EVIDENCE.QURAN_INHERITANCE_SONS_DAUGHTERS],
+    evidence: [EVIDENCE.QURAN_INHERITANCE_SONS_DAUGHTERS, EVIDENCE.CLASSICAL_SIRAJIYYAH!],
+  },
+  "INH-RESIDUARY-ORDER": {
+    ruleId: "INH-RESIDUARY-ORDER",
+    title: "Order of agnatic residuaries",
+    principle:
+      "A nearer agnatic residuary excludes a more distant one: descendants, father, paternal grandfather, full brothers, paternal brothers, brothers' sons, full paternal uncles, paternal uncles, then other agnates.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH!, EVIDENCE.CLASSICAL_HIDAYAH!, EVIDENCE.CLASSICAL_AL_MUGHNI!],
+    note: "Generic nephew/uncle categories are accepted only one at a time because per stirpes detail cannot be inferred from a count.",
+  },
+  "INH-GRANDFATHER-SIBLINGS": {
+    ruleId: "INH-GRANDFATHER-SIBLINGS",
+    title: "Grandfather with siblings - Zayd ibn Thabit's majority method",
+    principle:
+      "With no other fixed-share heir, the grandfather takes the better of sharing with the siblings as a brother and one third. Complex cases with other quota heirs or mixed full and paternal sibling classes are refused pending verification.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH!, EVIDENCE.CLASSICAL_HIDAYAH!, EVIDENCE.CLASSICAL_AL_MAJMU!],
+    note: "The companions and schools differed; exact application to a specific edition must be confirmed by a scholar.",
   },
   "INH-AWL": {
     ruleId: "INH-AWL",
@@ -130,10 +171,19 @@ export const INHERITANCE_RULES: Record<string, RuleReference> = {
     ruleId: "INH-RADD",
     title: "Radd (الرد)",
     principle:
-      "When fixed shares are less than the estate and no residuary exists, the surplus returns to the fixed-share heirs in proportion to their shares. Under the Hanafi method the spouse does not take Radd while another fixed-share heir exists.",
+      "When fixed shares are less than the estate and no residuary exists, the surplus returns to the non-spouse fixed-share heirs in proportion to their shares on the Hanafi/Hanbali and later Sunni-majority practice.",
     verificationStatus: "NEEDS_REVIEW",
-    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH],
-    note: "If only a spouse remains, the surplus belongs to the dhawu al-arham or the bayt al-mal and is outside this engine.",
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH!, EVIDENCE.CLASSICAL_AL_MUGHNI!],
+    note: "Classical Maliki and Shafi'i positions differed; a spouse does not take Radd while another fixed-share heir exists in the encoded method.",
+  },
+  "INH-DISTANT-KINDRED": {
+    ruleId: "INH-DISTANT-KINDRED",
+    title: "Distant kindred (ذوو الأرحام)",
+    principle:
+      "If no quota or agnatic residuary remains, distant kindred inherit before the public treasury; a surplus that is returned to quota heirs takes precedence.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [EVIDENCE.CLASSICAL_HIDAYAH!, EVIDENCE.CLASSICAL_AL_MUGHNI!, EVIDENCE.CLASSICAL_AL_MAJMU!],
+    note: "The generic category is accepted only where the result does not depend on the unnamed relationship; otherwise the case is refused.",
   },
   "INH-TASHIH": {
     ruleId: "INH-TASHIH",

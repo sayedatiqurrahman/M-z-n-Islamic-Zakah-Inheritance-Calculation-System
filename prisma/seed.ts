@@ -2,7 +2,7 @@ import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { ZAKAH_RULES } from "../src/modules/zakah/rules";
-import { INHERITANCE_RULES } from "../src/modules/inheritance/rules";
+import { INHERITANCE_METHODOLOGY_VERSION, INHERITANCE_RULES } from "../src/modules/inheritance/rules";
 import { EVIDENCE } from "../src/modules/fiqh/evidences/catalog";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -12,9 +12,10 @@ async function main() {
   // ---- Madhhabs ---------------------------------------------------------
   const madhhabs = [
     { key: "HANAFI" as const, nameEn: "Hanafi", nameAr: "الحنفي", nameBn: "হানাফি", enabled: true, sortOrder: 1 },
-    { key: "SHAFI" as const, nameEn: "Shafi'i", nameAr: "الشافعي", nameBn: "শাফিঈ", enabled: false, sortOrder: 2 },
-    { key: "MALIKI" as const, nameEn: "Maliki", nameAr: "المالكي", nameBn: "মালিকি", enabled: false, sortOrder: 3 },
-    { key: "HANBALI" as const, nameEn: "Hanbali", nameAr: "الحنبلي", nameBn: "হানবালি", enabled: false, sortOrder: 4 },
+    { key: "SUNNI_MAJORITY" as const, nameEn: "Sunni majority", nameAr: "جمهور أهل السنة", nameBn: "সুন্নি সংখ্যাগরিষ্ঠ", enabled: true, sortOrder: 2 },
+    { key: "SHAFI" as const, nameEn: "Shafi'i", nameAr: "الشافعي", nameBn: "শাফিঈ", enabled: false, sortOrder: 3 },
+    { key: "MALIKI" as const, nameEn: "Maliki", nameAr: "المالكي", nameBn: "মালিকি", enabled: false, sortOrder: 4 },
+    { key: "HANBALI" as const, nameEn: "Hanbali", nameAr: "الحنبلي", nameBn: "হানবালি", enabled: false, sortOrder: 5 },
   ];
   const madhhabRecords = new Map<string, { id: string }>();
   for (const m of madhhabs) {
@@ -27,58 +28,86 @@ async function main() {
     madhhabRecords.set(m.key, record);
   }
   const hanafi = madhhabRecords.get("HANAFI")!;
+  const sunniMajority = madhhabRecords.get("SUNNI_MAJORITY")!;
 
-  // ---- Methodology version ---------------------------------------------
-  const version = await prisma.methodologyVersion.upsert({
+  // ---- Methodology versions --------------------------------------------
+  const zakahVersion = await prisma.methodologyVersion.upsert({
     where: { madhhabId_version: { madhhabId: hanafi.id, version: "hanafi-v1.0.0" } },
     update: { isActive: true },
     create: {
       madhhabId: hanafi.id,
       version: "hanafi-v1.0.0",
-      label: "Hanafi Zakah & Fara'id — v1.0.0",
+      label: "Hanafi Zakah — v1.0.0",
       description:
-        "Initial academic methodology. Rules carry explicit verification statuses and must be reviewed by a qualified scholar.",
+        "Academic Hanafi zakah methodology. Rules carry explicit verification statuses and must be reviewed by a qualified scholar.",
+      isActive: true,
+    },
+  });
+  const inheritanceVersion = await prisma.methodologyVersion.upsert({
+    where: {
+      madhhabId_version: {
+        madhhabId: sunniMajority.id,
+        version: INHERITANCE_METHODOLOGY_VERSION,
+      },
+    },
+    update: { isActive: true },
+    create: {
+      madhhabId: sunniMajority.id,
+      version: INHERITANCE_METHODOLOGY_VERSION,
+      label: "Sunni-majority Inheritance — v2.0.0",
+      description:
+        "Academic Ahl al-Sunnah wa'l-Jamā'ah inheritance methodology covering all catalogued heirs. Ambiguous relationships and disputed cases are refused rather than guessed.",
       isActive: true,
     },
   });
 
   // ---- Fiqh rules -------------------------------------------------------
-  const allRules = [
-    ...Object.values(ZAKAH_RULES).map((r) => ({ ...r, domain: "ZAKAH" as const })),
-    ...Object.values(INHERITANCE_RULES).map((r) => ({ ...r, domain: "INHERITANCE" as const })),
+  const ruleSets = [
+    {
+      rules: Object.values(ZAKAH_RULES).map((r) => ({ ...r, domain: "ZAKAH" as const })),
+      madhhabId: hanafi.id,
+      versionId: zakahVersion.id,
+    },
+    {
+      rules: Object.values(INHERITANCE_RULES).map((r) => ({ ...r, domain: "INHERITANCE" as const })),
+      madhhabId: sunniMajority.id,
+      versionId: inheritanceVersion.id,
+    },
   ];
-  for (const rule of allRules) {
-    await prisma.fiqhRule.upsert({
-      where: { ruleId: rule.ruleId },
-      update: {
-        title: rule.title,
-        description: rule.principle,
-        verificationStatus: rule.verificationStatus,
-        implementationStatus: "IMPLEMENTED",
-        versionId: version.id,
-        madhhabId: hanafi.id,
-      },
-      create: {
-        ruleId: rule.ruleId,
-        madhhabId: hanafi.id,
-        versionId: version.id,
-        domain: rule.domain,
-        title: rule.title,
-        description: rule.principle,
-        verificationStatus: rule.verificationStatus,
-        implementationStatus: "IMPLEMENTED",
-        testCases: [],
-        notes: rule.note ?? null,
-      },
-    });
+  for (const { rules, madhhabId, versionId } of ruleSets) {
+    for (const rule of rules) {
+      await prisma.fiqhRule.upsert({
+        where: { ruleId: rule.ruleId },
+        update: {
+          title: rule.title,
+          description: rule.principle,
+          verificationStatus: rule.verificationStatus,
+          implementationStatus: "IMPLEMENTED",
+          versionId,
+          madhhabId,
+        },
+        create: {
+          ruleId: rule.ruleId,
+          madhhabId,
+          versionId,
+          domain: rule.domain,
+          title: rule.title,
+          description: rule.principle,
+          verificationStatus: rule.verificationStatus,
+          implementationStatus: "IMPLEMENTED",
+          testCases: [],
+          notes: rule.note ?? null,
+        },
+      });
+    }
   }
 
   // ---- Nisab configuration ---------------------------------------------
-  const existingNisab = await prisma.nisabConfiguration.findFirst({ where: { versionId: version.id } });
+  const existingNisab = await prisma.nisabConfiguration.findFirst({ where: { versionId: zakahVersion.id } });
   if (!existingNisab) {
     await prisma.nisabConfiguration.create({
       data: {
-        versionId: version.id,
+        versionId: zakahVersion.id,
         method: "SILVER",
         goldWeightGrams: 85,
         silverWeightGrams: 595,
@@ -184,7 +213,8 @@ async function main() {
     });
   }
 
-  console.log(`Seed complete: ${allRules.length} rules, ${topics.length} topics.`);
+  const ruleCount = ruleSets.reduce((total, set) => total + set.rules.length, 0);
+  console.log(`Seed complete: ${ruleCount} rules, ${topics.length} topics.`);
 }
 
 interface TopicSeed {
@@ -294,7 +324,7 @@ function buildTopics(): TopicSeed[] {
       definition: "The step-by-step calculation method used by the engine.",
       body_en:
         "The engine classifies assets, deducts eligible liabilities, compares the net wealth to the selected Nisab, evaluates Hawl, and applies 2.5% only when every condition is satisfied. Each step exposes its calculation, principle, reason, evidence and references.",
-      relatedScenario: "Every result includes a full eight-step explanation.",
+      relatedScenario: "Every result includes a full step-by-step explanation.",
     }),
     t({
       slug: "zakah-recipients", category: "ZAKAH",
@@ -319,7 +349,8 @@ function buildTopics(): TopicSeed[] {
         "Inheritance (الميراث) is the transfer of a deceased person's estate to eligible heirs. Fara'id (الفرائض) is the science of the prescribed shares.",
       body_en:
         "The Qur'an establishes inheritance in Surah An-Nisa. The estate is settled in sequence: funeral expenses, debts, valid bequests, then distribution. The science of Fara'id identifies fixed-share heirs, residuary heirs and distant kindred, and applies exclusion rules.",
-      hanafiRuling: "The Hanafi school has distinctive rules for grandfather with siblings, distant kindred and Radd.",
+      hanafiRuling:
+        "The inheritance engine follows the Sunni-majority (Ahl al-Sunnah wa'l-Jamā'ah) sequence and lists the classical source kitabs with explicit verification statuses.",
     }),
     t({
       slug: "inheritance-causes", category: "INHERITANCE",
@@ -374,21 +405,21 @@ function buildTopics(): TopicSeed[] {
       titleAr: "الرد", titleEn: "Radd (Return of Surplus)", titleBn: "রাদ্দ",
       definition: "Returning surplus estate to fixed-share heirs when no residuary exists.",
       body_en:
-        "When fixed shares sum to less than one and there is no residuary heir, the surplus is returned proportionally. The Hanafi treatment of spouses in Radd is flagged for scholar confirmation.",
+        "When fixed shares sum to less than one and there is no residuary heir, the surplus is returned proportionally to non-spouse quota heirs in the encoded Sunni-majority method. Spouse-only cases are refused unless a named distant kindred exists.",
     }),
     t({
       slug: "inheritance-grandfather-siblings", category: "INHERITANCE",
       titleAr: "الجد مع الإخوة", titleEn: "Grandfather with Siblings", titleBn: "ভাইদের সাথে দাদা",
-      definition: "A distinctive and debated Hanafi scenario.",
+      definition: "A debated scenario handled by Zayd ibn Thabit's Sunni-majority method.",
       body_en:
-        "The Hanafi rule for a grandfather inheriting alongside siblings is nuanced. The current engine refuses this combination and returns the scholarly-verification message rather than guessing.",
+        "With no other fixed-share heir, the grandfather takes the better of sharing with the siblings as a brother and one third. Cases involving other quota heirs or mixed full and paternal sibling classes are refused rather than guessed.",
     }),
     t({
       slug: "inheritance-distant-kindred", category: "INHERITANCE",
       titleAr: "ذوو الأرحام", titleEn: "Distant Kindred", titleBn: "দূরবর্তী আত্মীয়",
       definition: "Relatives who inherit only when no fixed-share or residuary heir exists.",
       body_en:
-        "Distant kindred have detailed Hanafi rules. This category is not yet implemented and is explicitly refused by the engine.",
+        "A single named distant kindred inherits the residue when no closer non-spouse heir, agnatic residuary or quota-heir return remains. More than one unnamed distant kindred is refused because the exact relationship changes the split.",
     }),
     t({
       slug: "inheritance-wasiyyah", category: "INHERITANCE",
@@ -410,7 +441,7 @@ function buildTopics(): TopicSeed[] {
       titleAr: "أصول الفقه", titleEn: "Principles of Islamic Jurisprudence", titleBn: "উসুলুল ফিকহ",
       definition: "The methodology by which rulings are derived from evidence.",
       body_en:
-        "Usul al-fiqh studies the sources and methods of deriving rulings. This application does not derive new rulings; it encodes rules already documented in the Hanafi tradition and marks their verification status.",
+        "Usul al-fiqh studies the sources and methods of deriving rulings. This application does not derive new rulings; it encodes documented Hanafi zakah rules and Sunni-majority inheritance rules, each with an explicit verification status.",
     }),
     t({
       slug: "principles-evidence", category: "PRINCIPLES",
@@ -424,7 +455,7 @@ function buildTopics(): TopicSeed[] {
       titleAr: "المذاهب الأربعة", titleEn: "The Four Schools of Law", titleBn: "চার মাযহাব",
       definition: "The recognised Sunni schools of jurisprudence.",
       body_en:
-        "The Hanafi, Shafi'i, Maliki and Hanbali schools share core sources but differ in details. Mīzān implements Hanafi only in v1 and never silently applies Hanafi rules while claiming another school. The provider architecture allows future expansion.",
+        "The Hanafi, Shafi'i, Maliki and Hanbali schools share core sources but differ in details. Mīzān applies Hanafi rules to Zakah and a declared Ahl al-Sunnah wa'l-Jamā'ah / Sunni-majority methodology to inheritance. It never silently applies a single-school rule while claiming another basis; disputed inheritance configurations are refused.",
     }),
   ];
 }

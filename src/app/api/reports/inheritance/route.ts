@@ -17,6 +17,12 @@ export async function POST(request: Request) {
     if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
 
     const input = inheritanceRequestSchema.parse(parsed.data.input);
+    if (input.madhhab !== "SUNNI_MAJORITY") {
+      return NextResponse.json(
+        { error: "This version uses the Sunni-majority inheritance basis." },
+        { status: 403 },
+      );
+    }
     const result = calculateInheritance(input);
 
     if (!result.supported) {
@@ -28,13 +34,13 @@ export async function POST(request: Request) {
 
     const pdf = await buildPdfReport({
       title: "Inheritance Distribution Report",
-      subtitle: "Hanafi Fara'id — academic calculation",
+      subtitle: "Sunni-majority Farāʾiḍ — academic calculation",
       meta: [
         { label: "Calculation date", value: formatDateTime(new Date()) },
         { label: "Deceased", value: input.deceasedName || "Not named" },
         { label: "Gender", value: input.deceasedGender === "MALE" ? "Male" : "Female" },
         { label: "Date of death", value: input.dateOfDeath },
-        { label: "Madhhab", value: "Hanafi" },
+        { label: "Basis", value: "Ahl al-Sunnah wa'l-Jamā'ah (Sunni majority)" },
         { label: "Methodology version", value: result.methodologyVersion },
         { label: "Currency", value: result.currency },
       ],
@@ -69,11 +75,21 @@ export async function POST(request: Request) {
               : [{ label: "Excluded heirs", value: "None" }],
         },
         {
+          heading: "Source kitabs",
+          rows:
+            result.sources.length > 0
+              ? result.sources.map((source) => ({
+                  label: source.label,
+                  value: `${source.verificationStatus}${source.note ? ` — ${source.note}` : ""}`,
+                }))
+              : [{ label: "Source kitabs", value: "Not supplied" }],
+        },
+        {
           heading: "Methodology notes",
           paragraphs:
             result.notes.length > 0
               ? result.notes
-              : ["This report follows the versioned Hanafi rules encoded in the application."],
+              : ["This report follows the versioned Sunni-majority rules encoded in the application."],
         },
       ],
       steps: result.steps.map((step) => ({
@@ -85,7 +101,7 @@ export async function POST(request: Request) {
         reason: step.reason,
       })),
       disclaimer:
-        "This is an academic thesis project. Distribution follows the declared Hanafi methodology and is not a fatwa. Evidence items carry explicit verification statuses; consult a qualified scholar before executing a distribution.",
+        "This is an academic thesis project. Distribution follows the declared Sunni-majority methodology and is not a fatwa. Evidence items carry explicit verification statuses; consult a qualified scholar before executing a distribution.",
     });
 
     return new Response(Buffer.from(pdf), {

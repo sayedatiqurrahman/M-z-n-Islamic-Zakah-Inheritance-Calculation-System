@@ -19,7 +19,7 @@ export const inheritanceHeirSchema = z.object({
 });
 
 export const inheritanceRequestSchema = z.object({
-  madhhab: z.literal("HANAFI"),
+  madhhab: z.enum(["HANAFI", "SUNNI_MAJORITY"]),
   methodologyVersion: z.string().min(1).max(64),
   currency: z.string().min(3).max(4),
   deceasedGender: z.enum(["MALE", "FEMALE"]),
@@ -53,7 +53,7 @@ export interface MunasakhaDeceasedInput {
 }
 
 export const munasakhaRequestSchema = z.object({
-  madhhab: z.literal("HANAFI"),
+  madhhab: z.enum(["HANAFI", "SUNNI_MAJORITY"]),
   methodologyVersion: z.string().min(1).max(64),
   currency: z.string().min(3).max(4),
   deceased: z.array(

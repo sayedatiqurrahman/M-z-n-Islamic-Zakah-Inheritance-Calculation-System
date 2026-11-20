@@ -57,7 +57,7 @@ export function DashboardView({
         description={t("dashboard.description")}
         actions={
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-800">
-            {t("common.hanafiVersion")}
+            {t("common.methodologyBadge")}
           </Badge>
         }
       />
