@@ -8,8 +8,9 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AppShell } from "@/components/layout/app-shell";
 
 // Poppins renders English; Hind Siliguri is the global Bangla fallback and the
-// primary face whenever the Bangla locale is active. Variable names
-// intentionally differ from the CSS theme tokens they feed: reusing
+// primary face whenever the Bangla locale is active. The variables are applied
+// to <html> so locale rules on the root element can resolve them; their names
+// intentionally differ from the CSS theme tokens they feed. Reusing
 // `--font-arabic` / `--font-bengali` here would create a circular
 // `var(--x): var(--x)` definition and break non-Latin rendering.
 const poppins = Poppins({
@@ -66,10 +67,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" dir="ltr" suppressHydrationWarning>
-      <body
-        className={`${poppins.variable} ${notoArabic.variable} ${hindSiliguri.variable} min-h-dvh antialiased`}
-      >
+    <html
+      lang="en"
+      dir="ltr"
+      suppressHydrationWarning
+      className={`${poppins.variable} ${notoArabic.variable} ${hindSiliguri.variable}`}
+    >
+      <body className="min-h-dvh antialiased">
         <ThemeProvider>
           <LocaleProvider>
             <TooltipProvider>

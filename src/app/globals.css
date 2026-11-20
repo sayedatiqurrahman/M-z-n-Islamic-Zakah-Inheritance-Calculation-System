@@ -186,6 +186,26 @@
   }
 }
 
+/*
+ * Bangla UI typography override.
+ *
+ * Tailwind utilities live in a later cascade layer than the base rules, so a
+ * `font-heading` / `font-serif` class on shell chrome can otherwise keep
+ * Poppins even when `html[lang="bn"]` asks for Hind Siliguri. These rules are
+ * deliberately unlayered and explicitly cover the sidebar, top bar, controls,
+ * their labels and placeholder text. Arabic-marked content is left on Naskh.
+ */
+html[lang="bn"] :where(body, aside, header, nav, h1, h2, h3, h4, h5, h6, button, input, select, textarea, label, a, [role="button"], [role="combobox"]):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[data-locale="bn"] :where(body, aside, header, nav, h1, h2, h3, h4, h5, h6, button, input, select, textarea, label, a, [role="button"], [role="combobox"]):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[lang="bn"] :where(aside, header, nav) :where(*):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[data-locale="bn"] :where(aside, header, nav) :where(*):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[lang="bn"] :is(.font-heading, .font-serif):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[data-locale="bn"] :is(.font-heading, .font-serif):not(:where(.font-arabic, [lang="ar"], [dir="rtl"])),
+html[lang="bn"] :is(input, textarea):not([dir="rtl"])::placeholder,
+html[data-locale="bn"] :is(input, textarea):not([dir="rtl"])::placeholder {
+  font-family: var(--font-bengali);
+}
+
 .dark .islamic-pattern {
   background-image:
     radial-gradient(circle at 1px 1px, rgba(52, 211, 153, 0.12) 1px, transparent 0);

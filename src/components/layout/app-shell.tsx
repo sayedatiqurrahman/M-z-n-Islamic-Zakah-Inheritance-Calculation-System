@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Scale className="size-5" />
           </span>
           <span className="flex flex-col">
-            <span className="font-serif text-lg font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
+            <span className="text-lg font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
           </span>
         </Link>
         <div className="flex-1 overflow-y-auto">
@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-700 text-white">
                 <Scale className="size-4" />
               </span>
-              <span className="font-serif font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
+              <span className="font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
             </Link>
             <span className="hidden text-sm text-muted-foreground md:inline">{t("app.subtitle")}</span>
           </div>
