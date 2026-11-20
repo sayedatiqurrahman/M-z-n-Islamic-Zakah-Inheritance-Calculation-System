@@ -109,8 +109,8 @@ const defaultValues: ZakahRequest = {
   liabilities: [],
   nisab: {
     method: "SILVER",
-    goldNisabGrams: 85,
-    silverNisabGrams: 595,
+    goldNisabGrams: 87.48,
+    silverNisabGrams: 612.36,
     goldPricePerGram: 0,
     silverPricePerGram: 0,
     priceSource: "Manual entry",

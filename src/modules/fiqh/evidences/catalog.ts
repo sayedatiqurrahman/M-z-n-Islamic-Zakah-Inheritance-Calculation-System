@@ -102,7 +102,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
     labelAr: "لا وصية لوارث",
     translation: "There is no bequest to an heir.",
     authenticity: "DISPUTED",
-    sourceUrl: TRUSTED_SOURCES.dorar,
+    sourceUrl: TRUSTED_SOURCES.dorar +"hadith/sharh/136668",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Widely acted upon; chains and grading must be verified by a scholar before use as evidence. No hadith number supplied deliberately.",
   },

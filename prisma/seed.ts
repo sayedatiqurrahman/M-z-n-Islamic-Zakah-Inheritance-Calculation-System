@@ -109,10 +109,10 @@ async function main() {
       data: {
         versionId: zakahVersion.id,
         method: "SILVER",
-        goldWeightGrams: 85,
-        silverWeightGrams: 595,
+        goldWeightGrams: 87.48,
+        silverWeightGrams: 612.36,
         rationale:
-          "Classical weights are 20 mithqal of gold and 200 dirhams of silver. Gram conversions and the default valuation method are configurable and must be confirmed against cited sources.",
+          "Original nisab weights are 7.5 tola of gold (87.48 g) and 52.5 tola of silver (612.36 g), using 11.664 g per tola. Gram values and the valuation method are configurable and should be confirmed against cited sources.",
         verificationStatus: "REFERENCE_REQUIRED",
       },
     });
@@ -184,7 +184,7 @@ async function main() {
       translation: "There is no bequest to an heir.",
       authenticity: "DISPUTED" as const,
       ruling: "Bequests to heirs require the consent of the other heirs.",
-      externalUrl: "https://www.dorar.net/",
+      externalUrl: "https://www.dorar.net/hadith/sharh/136668",
     },
     {
       collection: "To be verified",

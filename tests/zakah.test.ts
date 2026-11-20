@@ -14,8 +14,8 @@ const base: ZakahCalculationInput = {
   liabilities: [],
   nisab: {
     method: "SILVER",
-    goldNisabGrams: 85,
-    silverNisabGrams: 595,
+    goldNisabGrams: 87.48,
+    silverNisabGrams: 612.36,
     goldPricePerGram: 12000,
     silverPricePerGram: 150,
     priceSource: "manual test",
@@ -47,11 +47,12 @@ describe("Zakah engine", () => {
   });
 
   it("charges 2.5% when wealth equals Nisab", () => {
-    const result = calculateZakah({ ...base, assets: [cash(89250)] });
+    const nisabValue = 612.36 * 150;
+    const result = calculateZakah({ ...base, assets: [cash(nisabValue)] });
     expect(result.supported).toBe(true);
     if (!result.supported) return;
     expect(result.nisabReached).toBe(true);
-    expect(result.zakahPayable).toBe(2231.25);
+    expect(result.zakahPayable).toBeCloseTo(nisabValue * 0.025, 10);
   });
 
   it("charges 2.5% above Nisab", () => {
@@ -115,7 +116,7 @@ describe("Zakah engine", () => {
     });
     expect(result.supported).toBe(true);
     if (!result.supported) return;
-    expect(result.nisabValue).toBe(85 * 12000);
+    expect(result.nisabValue).toBe(87.48 * 12000);
   });
 });
 

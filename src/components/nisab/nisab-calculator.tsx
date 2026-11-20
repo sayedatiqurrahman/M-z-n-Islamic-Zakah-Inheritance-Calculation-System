@@ -22,8 +22,8 @@ export function NisabCalculator() {
   const router = useRouter();
   const [currency, setCurrency] = useState("BDT");
   const [method, setMethod] = useState<Method>("SILVER");
-  const [goldGrams, setGoldGrams] = useState(85);
-  const [silverGrams, setSilverGrams] = useState(595);
+  const [goldGrams, setGoldGrams] = useState(87.48);
+  const [silverGrams, setSilverGrams] = useState(612.36);
   const [goldPrice, setGoldPrice] = useState(0);
   const [silverPrice, setSilverPrice] = useState(0);
   const [source, setSource] = useState("");

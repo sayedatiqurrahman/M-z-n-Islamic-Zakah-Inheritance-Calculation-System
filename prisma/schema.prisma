@@ -403,8 +403,8 @@ model NisabConfiguration {
   versionId         String
   version           MethodologyVersion @relation(fields: [versionId], references: [id])
   method            NisabMethod @default(SILVER)
-  goldWeightGrams   Decimal    @default(85)   // classical 20 mithqal — source to be verified
-  silverWeightGrams Decimal    @default(595)  // classical 200 dirhams — source to be verified
+  goldWeightGrams   Decimal    @default(87.48)   // 7.5 tola × 11.664 g = 87.48 g (original nisab)
+  silverWeightGrams Decimal    @default(612.36)  // 52.5 tola × 11.664 g = 612.36 g (original nisab)
   goldPurity        Decimal    @default(1)
   silverPurity      Decimal    @default(1)
   rationale         String?

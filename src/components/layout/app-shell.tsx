@@ -81,14 +81,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Scale className="size-5" />
           </span>
           <span className="flex flex-col">
-            <span className="text-lg font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
+            <span className="text-lg font-bold text-emerald-900 dark:text-emerald-200">Mīzān</span>
           </span>
         </Link>
         <div className="flex-1 overflow-y-auto">
           <NavigationLinks />
         </div>
         <div className="mt-4 space-y-2 border-t border-emerald-100 pt-4 dark:border-emerald-500/15">
-          <div className="flex items-center justify-between px-2">
+          <div className="flex flex-wrap items-center justify-between px-2">
             <span className="text-xs text-muted-foreground">{t("common.methodology")}</span>
             <Badge variant="secondary" className="bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
               {t("common.methodologyBadge")}
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <SheetContent side="left" className="w-72 p-0" closeLabel={t("common.close")}>
                 <SheetHeader className="border-b border-emerald-100 px-6 py-5 dark:border-emerald-500/15">
                   <SheetTitle className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200">
-                    <Scale className="size-5" /> {t("app.name")}
+                    <Scale className="size-5" /> Mīzān
                   </SheetTitle>
                 </SheetHeader>
                 <div className="p-4">
@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-700 text-white">
                 <Scale className="size-4" />
               </span>
-              <span className="font-bold text-emerald-900 dark:text-emerald-200">{t("app.name")}</span>
+              <span className="font-bold text-emerald-900 dark:text-emerald-200">Mīzān</span>
             </Link>
             <span className="hidden text-sm text-muted-foreground md:inline">{t("app.subtitle")}</span>
           </div>
