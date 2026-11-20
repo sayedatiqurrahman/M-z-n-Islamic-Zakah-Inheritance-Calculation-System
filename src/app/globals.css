@@ -7,11 +7,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  /* Hind Siliguri is in every general stack so Bangla glyphs render everywhere,
+     not only inside elements explicitly marked lang="bn". */
+  --font-sans: var(--font-inter), var(--font-hind-siliguri), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, monospace;
   --font-arabic: var(--font-noto-arabic), "Noto Naskh Arabic", ui-serif, serif;
   --font-bengali: var(--font-hind-siliguri), "Hind Siliguri", ui-sans-serif, sans-serif;
-  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), var(--font-hind-siliguri), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -131,14 +133,20 @@
     @apply font-sans;
     -webkit-text-size-adjust: 100%;
   }
-  /* Locale-specific typography: Hind Siliguri for Bangla, Naskh for Arabic. */
+  /* Locale-specific typography: Hind Siliguri for Bangla, Naskh for Arabic.
+     Set on <html> so the whole document inherits it; a component utility such
+     as .font-heading may still override it deliberately. */
+  html[lang="bn"],
+  html[data-locale="bn"],
   html[lang="bn"] body,
   html[data-locale="bn"] body {
-    font-family: var(--font-bengali), "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-bengali);
   }
+  html[lang="ar"],
+  html[data-locale="ar"],
   html[lang="ar"] body,
   html[data-locale="ar"] body {
-    font-family: var(--font-arabic), "Noto Naskh Arabic", ui-serif, serif;
+    font-family: var(--font-arabic);
   }
   button,
   a {
