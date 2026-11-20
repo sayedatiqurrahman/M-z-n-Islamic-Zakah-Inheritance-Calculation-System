@@ -27,7 +27,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
     excerpt:
       "وَأَقِيمُوا۟ ٱلصَّلَوٰةَ وَءَاتُوا۟ ٱلزَّكَوٰةَ وَٱرْكَعُوا۟ مَعَ ٱلرَّٰكِعِينَ",
     translation: "And establish prayer and give zakah and bow with those who bow.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/2/43",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Text and translation must be checked against a verified mushaf and credited translation before publication.",
   },
@@ -40,7 +40,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
       "إِنَّمَا ٱلصَّدَقَٰتُ لِلْفُقَرَآءِ وَٱلْمَسَٰكِينِ وَٱلْعَٰمِلِينَ عَلَيْهَا وَٱلْمُؤَلَّفَةِ قُلُوبُهُمْ وَفِى ٱلرِّقَابِ وَٱلْغَٰرِمِينَ وَفِى سَبِيلِ ٱللَّهِ وَٱبْنِ ٱلسَّبِيلِ فَرِيضَةً مِّنَ ٱللَّهِ",
     translation:
       "Zakah expenditures are only for the poor, the needy, those employed to collect it, those whose hearts are to be reconciled, for freeing slaves, for those in debt, for the cause of Allah, and for the traveller — a duty imposed by Allah.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/9/60",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Eight categories of zakah recipients (مصارف الزكاة). Verify wording and translation.",
   },
@@ -53,7 +53,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
       "يُوصِيكُمُ ٱللَّهُ فِىٓ أَوْلَٰدِكُمْ لِلذَّكَرِ مِثْلُ حَظِّ ٱلْأُنثَيَيْنِ",
     translation:
       "Allah instructs you concerning your children: for the male, what is equal to the share of two females.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/4/11",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Basis of the agnatic residuary ratio; applies only after fixed-share heirs are allocated.",
   },
@@ -66,7 +66,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
       "وَلَكُمْ نِصْفُ مَا تَرَكَ أَزْوَٰجُكُمْ إِن لَّمْ يَكُن لَّهُنَّ وَلَدٌ",
     translation:
       "And for you is half of what your wives leave if they have no child; but if they have a child, for you is one fourth.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/4/12",
     verificationStatus: "REFERENCE_REQUIRED",
   },
   QURAN_PARENTS_SHARES: {
@@ -78,7 +78,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
       "وَلِأَبَوَيْهِ لِكُلِّ وَٰحِدٍ مِّنْهُمَا ٱلسُّدُسُ مِمَّا تَرَكَ إِن كَانَ لَهُۥ وَلَدٌ",
     translation:
       "And for the parents of the deceased, for each of them one sixth of what he left if there is a child.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/4/11",
     verificationStatus: "REFERENCE_REQUIRED",
   },
   QURAN_AWL: {
@@ -90,7 +90,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
       "وَإِنِ ٱمْرَؤٌۭ غَرِيقٌ يَرِثُهُۥ أَبَوَاهُ فَلِأُمِّهِ ٱلثُّلُثُ",
     translation:
       "And if a person is lost/drowned and leaves no child but parents, then for the mother is one third.",
-    sourceUrl: TRUSTED_SOURCES.quranCom,
+    sourceUrl: "https://quran.com/4/12",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Qur'anic basis cited in classical works for inheritance adjustments; exact derivation to be verified.",
   },
@@ -102,7 +102,7 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
     labelAr: "لا وصية لوارث",
     translation: "There is no bequest to an heir.",
     authenticity: "DISPUTED",
-    sourceUrl: TRUSTED_SOURCES.dorar +"hadith/sharh/136668",
+    sourceUrl: "https://www.dorar.net/hadith/sharh/136668",
     verificationStatus: "REFERENCE_REQUIRED",
     note: "Widely acted upon; chains and grading must be verified by a scholar before use as evidence. No hadith number supplied deliberately.",
   },

@@ -163,9 +163,9 @@ export function TopicDetailView({ topic }: { topic: TopicDetail }) {
 
       <Card className="border-amber-200 bg-amber-50/60">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm text-amber-950">{t("topic.academicNotice")}</CardTitle>
+          <CardTitle className="text-sm text-amber-950 dark:text-amber-600">{t("topic.academicNotice")}</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-xs leading-relaxed text-amber-900">
+        <CardContent className="space-y-2 text-xs leading-relaxed text-amber-900 dark:text-amber-300">
           <p>{t("topic.academicNoticeBody")}</p>
           <a href="https://www.quranpedia.net/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium underline">
             {t("topic.consult")} <ExternalLink className="size-3" />

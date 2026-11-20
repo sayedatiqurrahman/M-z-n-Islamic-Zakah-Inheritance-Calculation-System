@@ -354,7 +354,7 @@ export function InheritanceCalculator() {
       const response = await fetch("/api/reports/inheritance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: lastInput }),
+        body: JSON.stringify({ input: lastInput, locale }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -381,7 +381,8 @@ export function InheritanceCalculator() {
     : Object.values(counts).reduce((a, b) => a + (b ?? 0), 0);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-6">
         <Card>
           <CardHeader>
@@ -670,6 +671,7 @@ export function InheritanceCalculator() {
             onDownload={() => void downloadPdf()}
             saving={saving}
             downloading={downloading}
+            showExplanation={false}
           />
         ) : null}
         {!unsupported && mode === "MUNASAKHA" && !munasakhaResult ? (
@@ -722,6 +724,17 @@ export function InheritanceCalculator() {
           </div>
         ) : null}
       </div>
+      </div>
+      {!unsupported && mode === "SINGLE" && result ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("inheritance.explanation")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CalculationSteps steps={result.steps} />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -872,12 +885,14 @@ function InheritanceResultView({
   onDownload,
   saving,
   downloading,
+  showExplanation = true,
 }: {
   result: InheritanceCalculationResult;
   onSave?: () => void;
   onDownload?: () => void;
   saving?: boolean;
   downloading?: boolean;
+  showExplanation?: boolean;
 }) {
   const { t, locale } = useLocale();
   const eligible = result.outcomes.filter((o) => o.status === "ELIGIBLE");
@@ -1006,10 +1021,12 @@ function InheritanceResultView({
         </Card>
       )}
 
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">{t("inheritance.explanation")}</CardTitle></CardHeader>
-        <CardContent><CalculationSteps steps={result.steps} /></CardContent>
-      </Card>
+      {showExplanation ? (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">{t("inheritance.explanation")}</CardTitle></CardHeader>
+          <CardContent><CalculationSteps steps={result.steps} /></CardContent>
+        </Card>
+      ) : null}
 
       {(onSave || onDownload) && (
         <div className="grid gap-2 sm:grid-cols-2">

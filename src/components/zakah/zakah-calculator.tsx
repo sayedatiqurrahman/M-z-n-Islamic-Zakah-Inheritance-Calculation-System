@@ -127,7 +127,7 @@ const defaultValues: ZakahRequest = {
 };
 
 export function ZakahCalculator() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [result, setResult] = useState<ZakahCalculationResult | null>(null);
   const [lastInput, setLastInput] = useState<ZakahRequest | null>(null);
   const [unsupported, setUnsupported] = useState<string | null>(null);
@@ -277,7 +277,7 @@ export function ZakahCalculator() {
       const response = await fetch("/api/reports/zakah", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: lastInput }),
+        body: JSON.stringify({ input: lastInput, locale }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));

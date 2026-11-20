@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import type { Rational } from "./rational";
 import { toNumber } from "./rational";
+import type { Locale } from "./i18n";
 
 /** ISO 4217 currencies whose minor unit is not two digits. */
 const ISO_DECIMALS: Record<string, number> = {
@@ -92,14 +93,41 @@ export function formatPercent(rational: Rational): string {
   return `${(toNumber(rational) * 100).toFixed(2)}%`;
 }
 
-export function formatDate(date: Date | string): string {
-  const value = typeof date === "string" ? new Date(date) : date;
-  return format(value, "dd MMM yyyy");
+function localeTag(locale: Locale): string {
+  if (locale === "ar") return "ar";
+  if (locale === "bn") return "bn-BD";
+  return "en-GB";
 }
 
-export function formatDateTime(date: Date | string): string {
+export function formatDate(date: Date | string, locale: Locale = "en"): string {
   const value = typeof date === "string" ? new Date(date) : date;
-  return format(value, "dd MMM yyyy, HH:mm");
+  if (Number.isNaN(value.getTime())) return String(date);
+  try {
+    return new Intl.DateTimeFormat(localeTag(locale), {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(value);
+  } catch {
+    return format(value, "dd MMM yyyy");
+  }
+}
+
+export function formatDateTime(date: Date | string, locale: Locale = "en"): string {
+  const value = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(value.getTime())) return String(date);
+  try {
+    return new Intl.DateTimeFormat(localeTag(locale), {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(value);
+  } catch {
+    return format(value, "dd MMM yyyy, HH:mm");
+  }
 }
 
 /** Convert a currency amount to integer minor units for exact math. */

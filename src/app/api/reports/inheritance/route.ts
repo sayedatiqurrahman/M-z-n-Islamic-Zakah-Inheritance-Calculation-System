@@ -3,18 +3,25 @@ import { z } from "zod";
 import { inheritanceRequestSchema } from "@/modules/inheritance/schemas";
 import { calculateInheritance } from "@/modules/inheritance/engine";
 import { buildPdfReport } from "@/lib/pdf/report";
-import { formatAmount, formatDateTime } from "@/lib/formatting";
-import { HEIR_LABELS } from "@/components/inheritance/heir-catalog";
+import { formatAmount, formatDate } from "@/lib/formatting";
+import { heirLabel } from "@/components/inheritance/heir-catalog";
+import { translate, type Locale } from "@/lib/i18n";
 
 export const runtime = "nodejs";
 
-const bodySchema = z.object({ input: z.unknown() });
+const bodySchema = z.object({
+  input: z.unknown(),
+  locale: z.enum(["en", "ar", "bn"]).optional(),
+});
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const parsed = bodySchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+
+    const locale: Locale = parsed.data.locale ?? "en";
+    const t = (key: string, vars?: Record<string, string | number>) => translate(locale, key, vars);
 
     const input = inheritanceRequestSchema.parse(parsed.data.input);
     if (input.madhhab !== "SUNNI_MAJORITY") {
@@ -29,68 +36,85 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.reason, supported: false }, { status: 422 });
     }
 
-    const eligible = result.outcomes.filter((outcome) => outcome.status === "ELIGIBLE");
-    const excluded = result.outcomes.filter((outcome) => outcome.status === "EXCLUDED");
+    const eligible = result.outcomes.filter((o) => o.status === "ELIGIBLE");
+    const excluded = result.outcomes.filter((o) => o.status === "EXCLUDED");
+
+    const adjustmentLabel =
+      result.adjustment === "AWL"
+        ? t("inheritance.awl")
+        : result.adjustment === "RADD"
+          ? t("inheritance.radd")
+          : result.adjustment === "DISTANT_KINDRED"
+            ? t("inheritance.distantKindred")
+            : t("common.none");
+
+    const shareText = (o: (typeof eligible)[number]) => {
+      const frac = o.perIndividualFraction ?? o.fraction;
+      const fraction = frac ? `${frac.numerator}/${frac.denominator}` : t("report.none");
+      const amt =
+        o.perIndividualAmount !== undefined
+          ? `${formatAmount(o.perIndividualAmount, result.currency, locale)} (${t("report.perIndividual")})`
+          : formatAmount(o.amount ?? 0, result.currency, locale);
+      const groupNote =
+        o.count > 1 && o.amount !== undefined && o.perIndividualAmount !== undefined
+          ? ` — ${t("report.group")}: ${formatAmount(o.amount, result.currency, locale)}`
+          : "";
+      return `${fraction} — ${amt}${groupNote}`;
+    };
 
     const pdf = await buildPdfReport({
-      title: "Inheritance Distribution Report",
-      subtitle: "Sunni-majority Farāʾiḍ — academic calculation",
+      title: t("report.inheritance.title"),
+      subtitle: t("report.inheritance.subtitle"),
+      locale,
       meta: [
-        { label: "Calculation date", value: formatDateTime(new Date()) },
-        { label: "Deceased", value: input.deceasedName || "Not named" },
-        { label: "Gender", value: input.deceasedGender === "MALE" ? "Male" : "Female" },
-        { label: "Date of death", value: input.dateOfDeath },
-        { label: "Basis", value: "Ahl al-Sunnah wa'l-Jamā'ah (Sunni majority)" },
-        { label: "Methodology version", value: result.methodologyVersion },
-        { label: "Currency", value: result.currency },
+        { label: t("report.deceased"), value: input.deceasedName || t("report.none") },
+        { label: t("report.dateOfDeath"), value: formatDate(input.dateOfDeath, locale) },
+        { label: t("report.currency"), value: input.currency },
+        { label: t("report.grossEstate"), value: formatAmount(result.grossEstate, result.currency, locale) },
+        { label: t("report.madhhab"), value: t("common.sunniMajority") },
+        { label: t("report.basis"), value: result.methodologyBasis },
+        { label: t("report.adjustment"), value: adjustmentLabel },
+        { label: t("report.baseDenominator"), value: String(result.baseDenominator) },
       ],
+      chart: {
+        title: t("report.section.chart"),
+        currency: result.currency,
+        items: eligible
+          .filter((o) => (o.amount ?? 0) > 0)
+          .map((o) => ({
+            label: heirLabel(o.type, locale),
+            value: o.amount ?? 0,
+          })),
+      },
       sections: [
         {
-          heading: "Estate settlement",
+          heading: t("report.section.settlement"),
           rows: [
-            { label: "Gross estate", value: formatAmount(result.grossEstate, result.currency) },
-            { label: "Funeral expenses", value: formatAmount(result.funeralExpenses, result.currency) },
-            { label: "Debts", value: formatAmount(result.debts, result.currency) },
-            { label: "Valid bequests", value: formatAmount(result.validBequests, result.currency) },
-            { label: "Net distributable", value: formatAmount(result.netDistributable, result.currency) },
-            { label: "Adjustment", value: result.adjustment },
-            { label: "Base denominator", value: String(result.baseDenominator) },
+            { label: t("report.grossEstate"), value: formatAmount(result.grossEstate, result.currency, locale) },
+            { label: t("report.funeralExpenses"), value: formatAmount(result.funeralExpenses, result.currency, locale) },
+            { label: t("report.debts"), value: formatAmount(result.debts, result.currency, locale) },
+            { label: t("report.validBequests"), value: formatAmount(result.validBequests, result.currency, locale) },
+            { label: t("report.netDistributable"), value: formatAmount(result.netDistributable, result.currency, locale) },
           ],
         },
         {
-          heading: "Distribution table",
-          rows: eligible.map((outcome) => ({
-            label: `${HEIR_LABELS[outcome.type] ?? outcome.type}${outcome.count > 1 ? ` ×${outcome.count}` : ""} (${outcome.shareType})`,
-            value: `${outcome.fraction ? `${outcome.fraction.numerator}/${outcome.fraction.denominator}` : "—"} · ${outcome.amount !== undefined ? formatAmount(outcome.amount, result.currency) : "—"}`,
+          heading: t("report.section.distribution"),
+          rows: eligible.map((o) => ({
+            label: `${heirLabel(o.type, locale)}${o.count > 1 ? ` ×${o.count}` : ""}`,
+            value: shareText(o),
           })),
         },
-        {
-          heading: "Exclusion analysis",
-          rows:
-            excluded.length > 0
-              ? excluded.map((outcome) => ({
-                  label: `${HEIR_LABELS[outcome.type] ?? outcome.type} (${outcome.exclusionKind})`,
-                  value: `${outcome.reason} Excluded by: ${outcome.excludedBy ? (HEIR_LABELS[outcome.excludedBy] ?? outcome.excludedBy) : "n/a"}.`,
-                }))
-              : [{ label: "Excluded heirs", value: "None" }],
-        },
-        {
-          heading: "Source kitabs",
-          rows:
-            result.sources.length > 0
-              ? result.sources.map((source) => ({
-                  label: source.label,
-                  value: `${source.verificationStatus}${source.note ? ` — ${source.note}` : ""}`,
-                }))
-              : [{ label: "Source kitabs", value: "Not supplied" }],
-        },
-        {
-          heading: "Methodology notes",
-          paragraphs:
-            result.notes.length > 0
-              ? result.notes
-              : ["This report follows the versioned Sunni-majority rules encoded in the application."],
-        },
+        ...(excluded.length > 0
+          ? [
+              {
+                heading: t("report.section.excluded"),
+                rows: excluded.map((o) => ({
+                  label: heirLabel(o.type, locale),
+                  value: `${o.reason}${o.excludedBy ? ` ${t("report.excludedBy")}: ${heirLabel(o.excludedBy, locale)}.` : ""}`,
+                })),
+              },
+            ]
+          : []),
       ],
       steps: result.steps.map((step) => ({
         step: step.step,
@@ -100,20 +124,20 @@ export async function POST(request: Request) {
         principle: step.fiqhPrinciple,
         reason: step.reason,
       })),
-      disclaimer:
-        "This is an academic thesis project. Distribution follows the declared Sunni-majority methodology and is not a fatwa. Evidence items carry explicit verification statuses; consult a qualified scholar before executing a distribution.",
+      disclaimer: t("report.disclaimer.inheritance"),
     });
 
-    return new Response(Buffer.from(pdf), {
-      status: 200,
+    return new NextResponse(Buffer.from(pdf), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": 'attachment; filename="mizan-inheritance-report.pdf"',
+        "Content-Disposition": `attachment; filename="mizan-inheritance-${Date.now()}.pdf"`,
         "Cache-Control": "no-store",
       },
     });
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") console.error("[report:inheritance]", error);
-    return NextResponse.json({ error: "Unable to generate the report." }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to generate the report." },
+      { status: 500 },
+    );
   }
 }
