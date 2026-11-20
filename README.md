@@ -110,8 +110,8 @@ No API keys are required: live prices use public endpoints (see
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Production build (standalone output) |
+| `npm run dev` | Generate the Prisma client, then start the development server |
+| `npm run build` | Generate the Prisma client, then create the production build (standalone output) |
 | `npm run start` | Start the production build locally |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
