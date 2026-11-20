@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { calculateInheritance } from "@/modules/inheritance/engine";
-import type { InheritanceCalculationInput, HeirType } from "@/modules/inheritance/types";
+import { calculateInheritance, calculateMunasakha } from "@/modules/inheritance/engine";
+import type { InheritanceCalculationInput, HeirType, MunasakhaCalculationInput } from "@/modules/inheritance/types";
 import { INHERITANCE_METHODOLOGY_VERSION } from "@/modules/inheritance/rules";
 
 const base: InheritanceCalculationInput = {
@@ -153,5 +153,232 @@ describe("Hanafi inheritance engine", () => {
       .filter((o) => o.status === "ELIGIBLE")
       .reduce((acc, o) => acc + (o.amount ?? 0), 0);
     expect(total).toBeCloseTo(result.netDistributable, 2);
+  });
+});
+
+describe("Hanafi heir input guards", () => {
+  it("refuses more than one husband", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["HUSBAND", 2]),
+    });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("maximum");
+  });
+
+  it("refuses more than four wives", () => {
+    const result = calculateInheritance({ ...base, heirs: heirs(["WIFE", 5]) });
+    expect(result.supported).toBe(false);
+  });
+
+  it("refuses a husband for a male deceased", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "MALE",
+      heirs: heirs(["HUSBAND", 1]),
+    });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("female deceased");
+  });
+
+  it("refuses a wife for a female deceased", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["WIFE", 1]),
+    });
+    expect(result.supported).toBe(false);
+  });
+
+  it("refuses both a husband and a wife together", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "MALE",
+      heirs: heirs(["HUSBAND", 1], ["WIFE", 1]),
+    });
+    expect(result.supported).toBe(false);
+  });
+
+  it("refuses two mothers", () => {
+    const result = calculateInheritance({ ...base, heirs: heirs(["MOTHER", 2]) });
+    expect(result.supported).toBe(false);
+  });
+});
+
+describe("Tashih (corrected base) and per-individual amounts", () => {
+  it("enlarges the base so a group of three daughters receives whole parts", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["HUSBAND", 1], ["DAUGHTER", 3], ["FATHER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.adjustment).toBe("NONE");
+    expect(result.baseDenominator).toBe(36);
+    const daughters = result.tashih.parts.find((p) => p.type === "DAUGHTER");
+    expect(daughters?.groupParts).toBe(24);
+    expect(daughters?.perIndividualParts).toBe(8);
+    expect(daughters?.count).toBe(3);
+  });
+
+  it("exposes per-individual fractions and amounts for grouped heirs", () => {
+    const result = calculateInheritance({
+      ...base,
+      grossEstate: 1_000,
+      heirs: heirs(["SON", 3]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    const son = share(result, "SON");
+    expect(son?.count).toBe(3);
+    expect(son?.fraction).toEqual({ numerator: "1", denominator: "1" });
+    expect(son?.perIndividualFraction).toEqual({ numerator: "1", denominator: "3" });
+    expect(son?.amount).toBe(1000);
+    expect(son?.perIndividualAmount).toBeCloseTo(333.34, 2);
+    const parts = result.tashih.parts.find((p) => p.type === "SON");
+    expect(parts?.groupParts).toBe(3);
+    expect(parts?.perIndividualParts).toBe(1);
+  });
+
+  it("keeps group amounts summing to the net estate with uneven minor units", () => {
+    const result = calculateInheritance({
+      ...base,
+      grossEstate: 1_000.01,
+      heirs: heirs(["SON", 3]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    const son = share(result, "SON");
+    expect(son?.amount).toBeCloseTo(1000.01, 2);
+    expect(son?.perIndividualAmount).toBeDefined();
+    expect((son?.perIndividualAmount ?? 0) * 3).toBeCloseTo(1000.01, 1);
+  });
+});
+
+describe("Radd and spouse treatment", () => {
+  it("excludes the spouse from Radd when another fixed-share heir exists", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["HUSBAND", 1], ["DAUGHTER", 1]),
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.adjustment).toBe("RADD");
+    expect(share(result, "HUSBAND")?.fraction).toEqual({ numerator: "1", denominator: "4" });
+    expect(share(result, "DAUGHTER")?.fraction).toEqual({ numerator: "3", denominator: "4" });
+  });
+
+  it("refuses a spouse-only case because the surplus belongs to the bayt al-mal", () => {
+    const result = calculateInheritance({
+      ...base,
+      deceasedGender: "FEMALE",
+      heirs: heirs(["HUSBAND", 1]),
+    });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("bayt al-mal");
+  });
+});
+
+describe("Munasakha (multiple deceased)", () => {
+  const person = (
+    id: string,
+    overrides: Partial<MunasakhaCalculationInput["deceased"][number]> = {},
+  ): MunasakhaCalculationInput["deceased"][number] => ({
+    id,
+    deceasedGender: "MALE",
+    dateOfDeath: "2026-01-01",
+    grossEstate: 0,
+    funeralExpenses: 0,
+    debts: 0,
+    wasiyyah: 0,
+    otherObligations: 0,
+    heirConsentToWasiyyah: false,
+    heirs: [],
+    ...overrides,
+  });
+
+  it("passes an inherited share into the next estate and avoids double counting", () => {
+    const result = calculateMunasakha({
+      madhhab: "HANAFI",
+      methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+      currency: "BDT",
+      deceased: [
+        person("a", { grossEstate: 1200, heirs: heirs(["WIFE", 1], ["SON", 1]) }),
+        person("b", {
+          grossEstate: 0,
+          heirs: heirs(["WIFE", 1], ["SON", 1]),
+          inheritsFrom: { fromId: "a", heirType: "SON" },
+        }),
+      ],
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.cases).toHaveLength(2);
+    expect(result.cases[0]!.result.netDistributable).toBe(1200);
+    expect(result.cases[1]!.inheritedAmount).toBe(1050);
+    expect(result.cases[1]!.result.grossEstate).toBeCloseTo(1050, 2);
+    expect(result.totalPassedThrough).toBeCloseTo(1050, 2);
+    expect(result.totalNetEstate).toBeCloseTo(2250, 2);
+    expect(result.totalDistributed).toBeCloseTo(1200, 2);
+  });
+
+  it("chains more than two deceased in sequence", () => {
+    const result = calculateMunasakha({
+      madhhab: "HANAFI",
+      methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+      currency: "BDT",
+      deceased: [
+        person("a", { grossEstate: 800, heirs: heirs(["SON", 1]) }),
+        person("b", {
+          heirs: heirs(["SON", 1]),
+          inheritsFrom: { fromId: "a", heirType: "SON" },
+        }),
+        person("c", {
+          heirs: heirs(["SON", 1]),
+          inheritsFrom: { fromId: "b", heirType: "SON" },
+        }),
+      ],
+    });
+    expect(result.supported).toBe(true);
+    if (!result.supported) return;
+    expect(result.cases).toHaveLength(3);
+    expect(result.cases[1]!.inheritedAmount).toBe(800);
+    expect(result.cases[2]!.inheritedAmount).toBe(800);
+    expect(result.totalPassedThrough).toBe(1600);
+    expect(result.totalDistributed).toBe(800);
+  });
+
+  it("refuses a link to a non-eligible heir", () => {
+    const result = calculateMunasakha({
+      madhhab: "HANAFI",
+      methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+      currency: "BDT",
+      deceased: [
+        person("a", { grossEstate: 1200, heirs: heirs(["SON", 1], ["FULL_BROTHER", 1]) }),
+        person("b", {
+          heirs: heirs(["SON", 1]),
+          inheritsFrom: { fromId: "a", heirType: "FULL_BROTHER" },
+        }),
+      ],
+    });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("not an eligible heir");
+  });
+
+  it("refuses a link that references a later deceased", () => {
+    const result = calculateMunasakha({
+      madhhab: "HANAFI",
+      methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+      currency: "BDT",
+      deceased: [
+        person("a", { heirs: heirs(["SON", 1]), inheritsFrom: { fromId: "b", heirType: "SON" } }),
+        person("b", { heirs: heirs(["SON", 1]) }),
+      ],
+    });
+    expect(result.supported).toBe(false);
+    if (!result.supported) expect(result.reason).toContain("appear before");
   });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { HeirType } from "./types";
 
 const heirType = z.enum([
   "HUSBAND", "WIFE", "FATHER", "MOTHER",
@@ -11,6 +12,11 @@ const heirType = z.enum([
 ]);
 
 const money = z.number().finite().min(0).max(1e15);
+
+export const inheritanceHeirSchema = z.object({
+  type: heirType,
+  count: z.number().int().min(0).max(50),
+});
 
 export const inheritanceRequestSchema = z.object({
   madhhab: z.literal("HANAFI"),
@@ -25,10 +31,50 @@ export const inheritanceRequestSchema = z.object({
   wasiyyah: money,
   otherObligations: money,
   heirConsentToWasiyyah: z.boolean(),
-  heirs: z.array(z.object({
-    type: heirType,
-    count: z.number().int().min(0).max(50),
-  })).max(30),
+  heirs: z.array(inheritanceHeirSchema).max(30),
 }).strict();
 
 export type InheritanceRequest = z.infer<typeof inheritanceRequestSchema>;
+
+/** A deceased person of a Munasakha (مناسخة) calculation. */
+export interface MunasakhaDeceasedInput {
+  id: string;
+  deceasedName?: string;
+  deceasedGender: "MALE" | "FEMALE";
+  dateOfDeath: string;
+  grossEstate: number;
+  funeralExpenses: number;
+  debts: number;
+  wasiyyah: number;
+  otherObligations: number;
+  heirConsentToWasiyyah: boolean;
+  heirs: { type: HeirType; count: number }[];
+  inheritsFrom?: { fromId: string; heirType: HeirType };
+}
+
+export const munasakhaRequestSchema = z.object({
+  madhhab: z.literal("HANAFI"),
+  methodologyVersion: z.string().min(1).max(64),
+  currency: z.string().min(3).max(4),
+  deceased: z.array(
+    z.object({
+      id: z.string().min(1).max(64),
+      deceasedName: z.string().max(120).optional(),
+      deceasedGender: z.enum(["MALE", "FEMALE"]),
+      dateOfDeath: z.string().min(1),
+      grossEstate: money,
+      funeralExpenses: money,
+      debts: money,
+      wasiyyah: money,
+      otherObligations: money,
+      heirConsentToWasiyyah: z.boolean(),
+      heirs: z.array(inheritanceHeirSchema).max(30),
+      inheritsFrom: z.object({
+        fromId: z.string().min(1).max(64),
+        heirType,
+      }).optional(),
+    }),
+  ).max(10),
+}).strict();
+
+export type MunasakhaRequest = z.infer<typeof munasakhaRequestSchema>;

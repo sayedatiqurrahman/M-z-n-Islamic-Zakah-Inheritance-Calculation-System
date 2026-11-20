@@ -8,15 +8,19 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AppShell } from "@/components/layout/app-shell";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// Variable names intentionally differ from the CSS theme tokens they feed.
+// Reusing `--font-arabic` / `--font-bengali` here creates a circular
+// `var(--x): var(--x)` definition in the generated stylesheet, which makes
+// browsers fall back to the generic family and breaks Bangla/Arabic rendering.
 const notoArabic = Noto_Naskh_Arabic({
   subsets: ["arabic"],
-  variable: "--font-arabic",
+  variable: "--font-noto-arabic",
   display: "swap",
   weight: ["400", "700"],
 });
 const hindSiliguri = Hind_Siliguri({
   subsets: ["bengali", "latin"],
-  variable: "--font-bengali",
+  variable: "--font-hind-siliguri",
   display: "swap",
   weight: ["300", "400", "500", "600", "700"],
 });

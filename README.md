@@ -22,9 +22,15 @@ isolated by an opaque, HTTP-only browser cookie.
   silver Nisab; evaluates Hawl using a Hijri calendar; applies 2.5% only when
   every documented condition is satisfied.
 - **Inheritance calculator** — Hanafi fixed shares (`aṣḥāb al-furūḍ`),
-  residuary heirs (`ʿaṣabah`), complete/partial exclusion (`ḥajb`), `ʿAwl` and
-  `Radd`, with exact BigInt rational arithmetic and no floating-point share
-  math.
+  residuary heirs (`ʿaṣabah`), complete/partial exclusion (`ḥajb`), `ʿAwl`,
+  `Radd` and `Tashih` corrected bases, with exact BigInt rational arithmetic
+  and no floating-point share math. Logical heir caps reject impossible inputs
+  (two husbands, five wives, two mothers), and grouped heirs show both group
+  and per-individual amounts.
+- **Munasakha (مناسخة)** — chain multiple deceased in death order; an heir's
+  inherited share passes into their own estate before redistribution. Cases are
+  collapsible, the pass-through amount is labelled, and totals separate the
+  amount that passes between estates from the amount reaching living heirs.
 - **Nisab workspace** — classical weights, live metal valuation and a manual
   valuation mode with a recorded source.
 - **Live gold and silver prices** — retrieved by the backend at request time,
@@ -34,6 +40,9 @@ isolated by an opaque, HTTP-only browser cookie.
 - **Learning center** — 28 structured topics across Zakah, inheritance and
   jurisprudence principles.
 - **Calculation history** — view, reopen, delete and export saved work as PDF.
+  Saving and PDF export currently accept single-deceased calculations;
+  multi-deceased (Munasakha) results are shown for review with a localized
+  notice. See `docs/INHERITANCE_CALCULATION.md`.
 - **Three languages** — English (default), Arabic (RTL) and Bangla, with the
   Hind Siliguri font for Bangla. No runtime i18n package: every string lives in
   one central JSON catalog per language.

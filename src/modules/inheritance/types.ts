@@ -36,6 +36,7 @@ export interface InheritanceCalculationInput {
   currency: string;
   deceasedGender: "MALE" | "FEMALE";
   dateOfDeath: string;
+  deceasedName?: string;
   grossEstate: number;
   funeralExpenses: number;
   debts: number;
@@ -63,12 +64,37 @@ export interface HeirOutcome {
   principle: string;
   referenceIds: string[];
   shareType?: ShareType;
+  /** Share of the whole estate held by the group (all individuals of this type). */
   fraction?: SerializedFraction;
+  /** Share of the whole estate held by one individual of this type. */
+  perIndividualFraction?: SerializedFraction;
+  /** Group amount in the calculation currency. */
   amount?: number;
+  /** Amount received by one individual of this type. */
+  perIndividualAmount?: number;
+  /** Number of siham (parts) in the tashih base for the group. */
+  parts?: number;
+  /** Number of siham for one individual in the tashih base. */
+  perIndividualParts?: number;
   explanation: string;
 }
 
 export type AdjustmentType = "NONE" | "AWL" | "RADD";
+
+export interface TashihPart {
+  type: HeirType;
+  count: number;
+  /** Parts assigned to the whole group in the corrected base. */
+  groupParts: number;
+  /** Parts assigned to one individual. */
+  perIndividualParts: number;
+}
+
+export interface TashihResult {
+  /** Corrected common denominator (أصل المسألة بعد التصحيح). */
+  base: number;
+  parts: TashihPart[];
+}
 
 export interface InheritanceCalculationResult {
   supported: true;
@@ -82,9 +108,67 @@ export interface InheritanceCalculationResult {
   netDistributable: number;
   adjustment: AdjustmentType;
   baseDenominator: number;
+  tashih: TashihResult;
   outcomes: HeirOutcome[];
   steps: CalculationStepData[];
   notes: string[];
 }
 
 export type InheritanceEngineResult = InheritanceCalculationResult | UnsupportedResult;
+
+// ---------------------------------------------------------------------------
+// Munasakha (مناسخة): a second death before the first estate is distributed.
+// ---------------------------------------------------------------------------
+
+/** Link from a later deceased to the share they inherited from an earlier one. */
+export interface MunasakhaLink {
+  /** Local id of the earlier deceased in the same request. */
+  fromId: string;
+  /** The capacity in which the later deceased inherited from the earlier one. */
+  heirType: HeirType;
+}
+
+export interface MunasakhaDeceasedInput
+  extends Omit<InheritanceCalculationInput, "madhhab" | "methodologyVersion" | "currency"> {
+  /** Stable local identifier used by `inheritsFrom`. */
+  id: string;
+  inheritsFrom?: MunasakhaLink;
+}
+
+export interface MunasakhaCalculationInput {
+  madhhab: "HANAFI";
+  methodologyVersion: string;
+  currency: string;
+  deceased: MunasakhaDeceasedInput[];
+}
+
+export interface MunasakhaCaseResult {
+  id: string;
+  name?: string;
+  /** Amount received from the earlier estate and added to this estate. */
+  inheritedAmount: number;
+  inheritedFrom?: {
+    deceasedId: string;
+    deceasedName?: string;
+    heirType: HeirType;
+  };
+  result: InheritanceCalculationResult;
+}
+
+export interface MunasakhaCalculationResult {
+  supported: true;
+  madhhab: "HANAFI";
+  methodologyVersion: string;
+  currency: string;
+  cases: MunasakhaCaseResult[];
+  /** Total net estate of every case, including amounts inherited from earlier cases. */
+  totalNetEstate: number;
+  /** Amount passed from one deceased's estate into a later deceased's estate. */
+  totalPassedThrough: number;
+  /** Amount ultimately reaching living heirs (total net estate minus pass-through). */
+  totalDistributed: number;
+  steps: CalculationStepData[];
+  notes: string[];
+}
+
+export type MunasakhaEngineResult = MunasakhaCalculationResult | UnsupportedResult;

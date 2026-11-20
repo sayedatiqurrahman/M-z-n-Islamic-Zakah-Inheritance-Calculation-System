@@ -14,6 +14,37 @@ export const UNSUPPORTED_HEIR_TYPES: HeirType[] = [
   "PATERNAL_BROTHERS_SON",
 ];
 
+/**
+ * Logical upper bound for the number of living individuals in each category.
+ * A person has one father, one mother and at most four wives; a husband is a
+ * single person. These bounds stop nonsensical inputs such as two husbands.
+ */
+export const HEIR_MAX_COUNTS: Record<HeirType, number> = {
+  HUSBAND: 1,
+  WIFE: 4,
+  FATHER: 1,
+  MOTHER: 1,
+  PATERNAL_GRANDFATHER: 1,
+  PATERNAL_GRANDMOTHER: 1,
+  MATERNAL_GRANDMOTHER: 1,
+  SON: 20,
+  DAUGHTER: 20,
+  SONS_SON: 20,
+  SONS_DAUGHTER: 20,
+  FULL_BROTHER: 20,
+  FULL_SISTER: 20,
+  PATERNAL_BROTHER: 20,
+  PATERNAL_SISTER: 20,
+  MATERNAL_BROTHER: 20,
+  MATERNAL_SISTER: 20,
+  FULL_BROTHERS_SON: 20,
+  PATERNAL_BROTHERS_SON: 20,
+  PATERNAL_UNCLE: 20,
+  FULL_PATERNAL_UNCLE: 20,
+  OTHER_AGNATIC: 20,
+  DISTANT_KINDRED: 20,
+};
+
 export const INHERITANCE_RULES: Record<string, RuleReference> = {
   "INH-ESTATE-SEQUENCE": {
     ruleId: "INH-ESTATE-SEQUENCE",
@@ -98,10 +129,28 @@ export const INHERITANCE_RULES: Record<string, RuleReference> = {
   "INH-RADD": {
     ruleId: "INH-RADD",
     title: "Radd (الرد)",
-    principle: "When fixed shares are less than the estate and no residuary exists, the surplus returns to eligible fixed heirs.",
+    principle:
+      "When fixed shares are less than the estate and no residuary exists, the surplus returns to the fixed-share heirs in proportion to their shares. Under the Hanafi method the spouse does not take Radd while another fixed-share heir exists.",
     verificationStatus: "NEEDS_REVIEW",
     evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH],
-    note: "Application to spouses is a madhhab-specific detail requiring scholar confirmation.",
+    note: "If only a spouse remains, the surplus belongs to the dhawu al-arham or the bayt al-mal and is outside this engine.",
+  },
+  "INH-TASHIH": {
+    ruleId: "INH-TASHIH",
+    title: "Tashih al-mas'ala (تصحيح المسألة)",
+    principle:
+      "Final fractions are expressed over the least common denominator; when a group's parts are not divisible by its number of individuals, the base is multiplied by the smallest required factor so every individual receives whole parts.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH],
+  },
+  "INH-MUNASAKHA": {
+    ruleId: "INH-MUNASAKHA",
+    title: "Munasakha (المناسخة)",
+    principle:
+      "When an heir dies before the first estate is distributed, that heir's inherited share is added to their own estate and distributed among their own heirs in the second calculation.",
+    verificationStatus: "NEEDS_REVIEW",
+    evidence: [EVIDENCE.CLASSICAL_SIRAJIYYAH],
+    note: "The engine applies the second distribution after the first and records the amount passed between the two estates.",
   },
 };
 

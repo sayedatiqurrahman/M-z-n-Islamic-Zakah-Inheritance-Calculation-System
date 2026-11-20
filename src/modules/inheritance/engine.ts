@@ -14,6 +14,7 @@ import {
 import { fromMinorUnits, toMinorUnits } from "@/lib/formatting";
 import { UNSUPPORTED_MESSAGE, unsupported, type CalculationStepData } from "@/modules/fiqh/types";
 import {
+  HEIR_MAX_COUNTS,
   INHERITANCE_METHODOLOGY_VERSION,
   INHERITANCE_RULES,
   UNSUPPORTED_HEIR_TYPES,
@@ -26,7 +27,13 @@ import type {
   InheritanceCalculationInput,
   InheritanceCalculationResult,
   InheritanceEngineResult,
+  MunasakhaCalculationInput,
+  MunasakhaCaseResult,
+  MunasakhaEngineResult,
+  SerializedFraction,
   ShareType,
+  TashihPart,
+  TashihResult,
 } from "./types";
 
 interface AllocatedHeir {
@@ -36,6 +43,8 @@ interface AllocatedHeir {
   shareType: ShareType;
   ruleId: string;
   reason: string;
+  /** Relative weight of one individual inside a residuary group (2:1 agnatic ratio). */
+  residuaryWeight?: number;
 }
 
 interface ExcludedHeir {
@@ -66,12 +75,36 @@ function commonDenominator(values: readonly Rational[]): bigint {
   return values.reduce((acc, value) => lcm(acc, value.d), 1n);
 }
 
+function serializeFraction(value: Rational): SerializedFraction {
+  return { numerator: value.n.toString(), denominator: value.d.toString() };
+}
+
+/** Split a group amount into per-individual amounts, keeping the total exact. */
+function splitEvenly(totalMinor: bigint, count: number): bigint[] {
+  const n = BigInt(count);
+  const base = totalMinor / n;
+  const remainder = totalMinor - base * n;
+  return Array.from({ length: count }, (_, index) => (BigInt(index) < remainder ? base + 1n : base));
+}
+
+function gcdBig(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a;
+  let y = b < 0n ? -b : b;
+  while (y !== 0n) {
+    const r = x % y;
+    x = y;
+    y = r;
+  }
+  return x === 0n ? 1n : x;
+}
+
 /**
  * Conservative Hanafi inheritance engine.
  *
  * Only combinations backed by a documented rule are computed. Any ambiguous
  * or unimplemented configuration returns the mandated "requires scholarly
- * verification" result rather than a guessed distribution.
+ * verification" result rather than a guessed distribution. The final fractions
+ * are normalised with Tashih (تصحيح المسألة) so per-individual shares are whole.
  */
 export function calculateInheritance(input: InheritanceCalculationInput): InheritanceEngineResult {
   const steps: CalculationStepData[] = [];
@@ -83,6 +116,12 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   for (const heir of input.heirs) {
     if (!Number.isInteger(heir.count) || heir.count < 0) {
       return unsupported("Invalid heir count supplied.", steps);
+    }
+    if (heir.count > HEIR_MAX_COUNTS[heir.type]) {
+      return unsupported(
+        `The number of ${heir.type} entered exceeds the logical maximum of ${HEIR_MAX_COUNTS[heir.type]}.`,
+        steps,
+      );
     }
     if (heir.count > 0) counts.set(heir.type, (counts.get(heir.type) ?? 0) + heir.count);
   }
@@ -110,6 +149,9 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   }
   if (count("HUSBAND") > 1 || count("WIFE") > 4) {
     return unsupported("Invalid number of spouses (maximum one husband or four wives).", steps);
+  }
+  if (input.heirs.every((h) => h.count === 0)) {
+    return unsupported("No heirs were supplied.", steps);
   }
 
   const siblingTypes: HeirType[] = [
@@ -140,9 +182,6 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       "Mixed sibling categories (full/paternal/maternal together) require scholarly verification.",
       steps,
     );
-  }
-  if (input.heirs.every((h) => h.count === 0)) {
-    return unsupported("No heirs were supplied.", steps);
   }
 
   const hasSon = has("SON");
@@ -257,8 +296,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     if (maleDescendant) {
       addFixed("FATHER", rational(1, 6), "FIXED", "INH-PARENTS", "a male descendant reduces the father to 1/6");
     } else {
-      allocated.push({ type: "FATHER", count: 1, fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH",
-        reason: "with no male descendant the father inherits as residuary" });
+      allocated.push({ type: "FATHER", count: 1, fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "with no male descendant the father inherits as residuary" });
     }
   }
   if (has("MOTHER")) {
@@ -270,23 +308,26 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     if (maleDescendant) {
       addFixed("PATERNAL_GRANDFATHER", rational(1, 6), "FIXED", "INH-PARENTS", "a male descendant reduces the grandfather to 1/6");
     } else {
-      allocated.push({ type: "PATERNAL_GRANDFATHER", count: 1, fraction: RATIONAL_ZERO, shareType: "RESIDUARY",
-        ruleId: "INH-ASABAH", reason: "with no male descendant the grandfather inherits as residuary" });
+      allocated.push({ type: "PATERNAL_GRANDFATHER", count: 1, fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "with no male descendant the grandfather inherits as residuary" });
     }
   }
+
   const grandmothers: HeirType[] = ["PATERNAL_GRANDMOTHER", "MATERNAL_GRANDMOTHER"];
   const eligibleGrandmothers = grandmothers.filter((g) => has(g) && !isExcluded(g));
   if (eligibleGrandmothers.length > 0) {
     allocated.push({
-      type: eligibleGrandmothers[0], count: eligibleGrandmothers.length, fraction: rational(1, 6),
-      shareType: "FIXED", ruleId: "INH-PARENTS", reason: "eligible grandmothers share 1/6 equally",
+      type: eligibleGrandmothers[0],
+      count: eligibleGrandmothers.length,
+      fraction: rational(1, 6),
+      shareType: "FIXED",
+      ruleId: "INH-PARENTS",
+      reason: "eligible grandmothers share 1/6 equally",
     });
   }
 
   if (has("DAUGHTER")) {
     if (maleDescendant) {
-      allocated.push({ type: "DAUGHTER", count: count("DAUGHTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY",
-        ruleId: "INH-ASABAH", reason: "daughters become residuary with a male descendant" });
+      allocated.push({ type: "DAUGHTER", count: count("DAUGHTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "daughters become residuary with a male descendant" });
     } else {
       addFixed("DAUGHTER", rational(count("DAUGHTER") === 1 ? 1 : 2, count("DAUGHTER") === 1 ? 2 : 3),
         "FIXED", "INH-CHILDREN",
@@ -296,41 +337,35 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   if (has("SONS_DAUGHTER") && !isExcluded("SONS_DAUGHTER")) {
     const d = count("DAUGHTER");
     if (d === 1) {
-      addFixed("SONS_DAUGHTER", rational(1, 6), "FIXED", "INH-GRANDCHILDREN",
-        "one daughter reduces the son's daughter to a complementary 1/6");
+      addFixed("SONS_DAUGHTER", rational(1, 6), "FIXED", "INH-GRANDCHILDREN", "one daughter reduces the son's daughter to a complementary 1/6");
     } else if (d === 0) {
       addFixed("SONS_DAUGHTER", rational(count("SONS_DAUGHTER") === 1 ? 1 : 2, count("SONS_DAUGHTER") === 1 ? 2 : 3),
         "FIXED", "INH-GRANDCHILDREN", "son's daughters inherit when no son or daughter excludes them");
     }
   }
   if (has("SON")) {
-    allocated.push({ type: "SON", count: count("SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY",
-      ruleId: "INH-ASABAH", reason: "sons are residuary heirs" });
+    allocated.push({ type: "SON", count: count("SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "sons are residuary heirs" });
   }
   if (has("SONS_SON")) {
-    allocated.push({ type: "SONS_SON", count: count("SONS_SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY",
-      ruleId: "INH-ASABAH", reason: "son's sons are residuary heirs in the absence of sons" });
+    allocated.push({ type: "SONS_SON", count: count("SONS_SON"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-ASABAH", reason: "son's sons are residuary heirs in the absence of sons" });
   }
 
   // Siblings
   const addResiduarySibling = (type: HeirType, weight: number, reason: string) => {
     if (has(type) && !isExcluded(type)) {
-      allocated.push({ type, count: count(type), fraction: RATIONAL_ZERO, shareType: "RESIDUARY",
-        ruleId: "INH-SIBLINGS", reason });
+      allocated.push({ type, count: count(type), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason, residuaryWeight: weight });
     }
   };
+
   if (hasFull) {
     if (has("FULL_BROTHER")) {
-      // A full brother makes full sisters residuary agnates (2:1).
       addResiduarySibling("FULL_BROTHER", 2, "full brothers are residuary heirs");
       addResiduarySibling("FULL_SISTER", 1, "full sisters become residuary alongside a full brother");
     } else if (has("FULL_SISTER") && !isExcluded("FULL_SISTER")) {
       if (count("DAUGHTER") === 1) {
-        allocated.push({ type: "FULL_SISTER", count: count("FULL_SISTER"), fraction: RATIONAL_ZERO,
-          shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a full sister is residuary with one daughter (عصبة مع الغير)" });
+        allocated.push({ type: "FULL_SISTER", count: count("FULL_SISTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a full sister is residuary with one daughter (عصبة مع الغير)" });
       } else {
-        addFixed("FULL_SISTER", rational(count("FULL_SISTER") === 1 ? 1 : 2, count("FULL_SISTER") === 1 ? 2 : 3),
-          "FIXED", "INH-SIBLINGS", "full sisters take 1/2 or 2/3 with no male sibling");
+        allocated.push({ type: "FULL_SISTER", count: count("FULL_SISTER"), fraction: rational(count("FULL_SISTER") === 1 ? 1 : 2, count("FULL_SISTER") === 1 ? 2 : 3), shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: "full sisters take 1/2 or 2/3 with no male sibling" });
       }
     }
   } else if (hasPaternal) {
@@ -339,11 +374,9 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       addResiduarySibling("PATERNAL_SISTER", 1, "paternal sisters become residuary alongside a paternal brother");
     } else if (has("PATERNAL_SISTER") && !isExcluded("PATERNAL_SISTER")) {
       if (count("DAUGHTER") === 1) {
-        allocated.push({ type: "PATERNAL_SISTER", count: count("PATERNAL_SISTER"), fraction: RATIONAL_ZERO,
-          shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a paternal sister is residuary with one daughter" });
+        allocated.push({ type: "PATERNAL_SISTER", count: count("PATERNAL_SISTER"), fraction: RATIONAL_ZERO, shareType: "RESIDUARY", ruleId: "INH-SIBLINGS", reason: "a paternal sister is residuary with one daughter" });
       } else {
-        addFixed("PATERNAL_SISTER", rational(count("PATERNAL_SISTER") === 1 ? 1 : 2, count("PATERNAL_SISTER") === 1 ? 2 : 3),
-          "FIXED", "INH-SIBLINGS", "paternal sisters take 1/2 or 2/3");
+        allocated.push({ type: "PATERNAL_SISTER", count: count("PATERNAL_SISTER"), fraction: rational(count("PATERNAL_SISTER") === 1 ? 1 : 2, count("PATERNAL_SISTER") === 1 ? 2 : 3), shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: "paternal sisters take 1/2 or 2/3" });
       }
     }
   } else if (hasMaternal) {
@@ -352,18 +385,10 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     const maternalReason = "maternal siblings share 1/6 (one) or 1/3 (two or more)";
     const representative: HeirType = has("MATERNAL_BROTHER") ? "MATERNAL_BROTHER" : "MATERNAL_SISTER";
     if (!isExcluded(representative)) {
-      allocated.push({
-        type: representative,
-        count: maternalTotal,
-        fraction: maternalFraction,
-        shareType: "FIXED",
-        ruleId: "INH-SIBLINGS",
-        reason: maternalReason,
-      });
+      allocated.push({ type: representative, count: maternalTotal, fraction: maternalFraction, shareType: "FIXED", ruleId: "INH-SIBLINGS", reason: maternalReason });
     }
   }
 
-  // ---- Step 2: eligible heirs ------------------------------------------
   if (allocated.length === 0) {
     return unsupported("No eligible heir remains after applying exclusion rules.", steps);
   }
@@ -378,7 +403,6 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     notes: [],
   });
 
-  // ---- Step 3: exclusion analysis --------------------------------------
   const genuineExclusions = excludedFinal.filter((e) => e.kind !== "NONE");
   pushStep({
     title: "Analyse exclusions (الحجب)",
@@ -391,7 +415,7 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     notes: genuineExclusions.map((e) => `${e.type}: ${e.reason}`),
   });
 
-  // ---- Step 4: fixed shares --------------------------------------------
+  // ---- Fixed shares -----------------------------------------------------
   const fixedHeirs = allocated.filter((a) => a.shareType === "FIXED");
   const residuaryHeirs = allocated.filter((a) => a.shareType === "RESIDUARY");
   const fixedTotal = sum(fixedHeirs.map((a) => a.fraction));
@@ -407,21 +431,40 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     notes: fixedHeirs.map((a) => a.reason),
   });
 
-  // ---- Step 5: residue --------------------------------------------------
+  // ---- Residue, ʿAwl and Radd ------------------------------------------
   let adjustment: AdjustmentType = "NONE";
   const finalFractions = new Map<AllocatedHeir, Rational>();
+  const fixedGreaterThanOne = fixedTotal.n > fixedTotal.d;
+  const fixedLessThanOne = fixedTotal.n < fixedTotal.d;
 
-  if (residuaryHeirs.length > 0) {
+  if (fixedGreaterThanOne) {
+    // ʿAwl: the fixed shares exceed the estate.
+    adjustment = "AWL";
+    fixedHeirs.forEach((heir) => {
+      finalFractions.set(heir, mul(heir.fraction, div(RATIONAL_ONE, fixedTotal)));
+    });
+    residuaryHeirs.forEach((heir) => finalFractions.set(heir, RATIONAL_ZERO));
+    pushStep({
+      title: "Apply ʿAwl (العول)",
+      calculation: `Shares sum to ${fractionToString(fixedTotal)} > 1; denominators are increased proportionally`,
+      result: "All fixed shares are proportionally reduced to the estate",
+      fiqhPrinciple: INHERITANCE_RULES["INH-AWL"].principle,
+      reason: "Fixed shares exceed the estate, so denominators are increased proportionally.",
+      evidence: INHERITANCE_RULES["INH-AWL"].evidence,
+      references: ["INH-AWL"],
+      notes: ["Residuary heirs receive no residue in an ʿAwl case."],
+    });
+  } else if (residuaryHeirs.length > 0) {
     const residue = sub(RATIONAL_ONE, fixedTotal);
-    const weights = residuaryHeirs.map((a) => {
-      const weight = a.type === "SON" || a.type === "SONS_SON" || a.type === "FULL_BROTHER" || a.type === "PATERNAL_BROTHER" ? 2 : 1;
-      return rational(BigInt(weight * a.count));
+    const weights = residuaryHeirs.map((heir) => {
+      const weight = heir.type === "SON" || heir.type === "SONS_SON" || heir.type === "FULL_BROTHER" || heir.type === "PATERNAL_BROTHER" ? 2 : 1;
+      return rational(BigInt(weight * heir.count));
     });
     const weightSum = sum(weights);
-    residuaryHeirs.forEach((a, i) => {
-      finalFractions.set(a, mul(residue, div(weights[i], weightSum)));
+    residuaryHeirs.forEach((heir, index) => {
+      finalFractions.set(heir, mul(residue, div(weights[index], weightSum)));
     });
-    fixedHeirs.forEach((a) => finalFractions.set(a, a.fraction));
+    fixedHeirs.forEach((heir) => finalFractions.set(heir, heir.fraction));
     pushStep({
       title: "Calculate the residuary distribution (العصبات)",
       calculation: `1 − ${fractionToString(fixedTotal)} = ${fractionToString(residue)}`,
@@ -432,42 +475,41 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       references: ["INH-ASABAH"],
       notes: residuaryHeirs.map((a) => a.reason),
     });
-  } else if (fixedTotal.n > fixedTotal.d) {
-    // Awl
-    adjustment = "AWL";
-    const q = commonDenominator(fixedHeirs.map((a) => a.fraction));
-    const scaled = fixedHeirs.map((a) => a.fraction.n * (q / a.fraction.d));
-    const p = scaled.reduce((acc, v) => acc + v, 0n);
-    fixedHeirs.forEach((a, i) => finalFractions.set(a, rational(scaled[i], p)));
-    pushStep({
-      title: "Apply Awl (العول)",
-      calculation: `Shares sum to ${fractionToString(fixedTotal)} > 1; denominator increased to ${p.toString()}`,
-      result: `All shares proportionally reduced to a base of ${p.toString()}`,
-      fiqhPrinciple: INHERITANCE_RULES["INH-AWL"].principle,
-      reason: "Fixed shares exceed the estate, so denominators are increased proportionally.",
-      evidence: INHERITANCE_RULES["INH-AWL"].evidence,
-      references: ["INH-AWL"],
-      notes: [],
-    });
-  } else if (fixedTotal.n < fixedTotal.d) {
-    // Radd
+  } else if (fixedLessThanOne) {
+    // Radd: the surplus returns to the non-spouse fixed-share heirs. Under the
+    // Hanafi method a spouse does not take Radd while another fixed-share heir
+    // exists. If only a spouse remains, the surplus belongs to the dhawu
+    // al-arham or bayt al-mal, which this engine does not model.
+    const raddRecipients = fixedHeirs.filter((heir) => heir.type !== "HUSBAND" && heir.type !== "WIFE");
+    if (raddRecipients.length === 0) {
+      return unsupported(
+        "The surplus after the spouse's fixed share belongs to the dhawu al-arham or the bayt al-mal. This case is not currently supported by the verified Hanafi rules engine.",
+        steps,
+      );
+    }
     adjustment = "RADD";
     const surplus = sub(RATIONAL_ONE, fixedTotal);
-    fixedHeirs.forEach((a) => {
-      finalFractions.set(a, add(a.fraction, mul(surplus, div(a.fraction, fixedTotal))));
+    const recipientTotal = sum(raddRecipients.map((h) => h.fraction));
+    fixedHeirs.forEach((heir) => {
+      if (heir.type === "HUSBAND" || heir.type === "WIFE") {
+        finalFractions.set(heir, heir.fraction);
+      } else {
+        finalFractions.set(heir, add(heir.fraction, mul(surplus, div(heir.fraction, recipientTotal))));
+      }
     });
     pushStep({
       title: "Apply Radd (الرد)",
       calculation: `1 − ${fractionToString(fixedTotal)} = ${fractionToString(surplus)} returned proportionally`,
-      result: "Surplus returned to fixed-share heirs",
+      result: "Surplus returned to the non-spouse fixed-share heirs",
       fiqhPrinciple: INHERITANCE_RULES["INH-RADD"].principle,
       reason: "Shares are less than the estate and there is no residuary heir.",
       evidence: INHERITANCE_RULES["INH-RADD"].evidence,
       references: ["INH-RADD"],
-      notes: ["Hanafi treatment of spouses in Radd requires scholar confirmation."],
+      notes: ["Under the Hanafi method the spouse does not take Radd while another fixed-share heir exists."],
     });
   } else {
-    fixedHeirs.forEach((a) => finalFractions.set(a, a.fraction));
+    fixedHeirs.forEach((heir) => finalFractions.set(heir, heir.fraction));
+    residuaryHeirs.forEach((heir) => finalFractions.set(heir, RATIONAL_ZERO));
   }
 
   const allFractions = Array.from(finalFractions.values());
@@ -479,20 +521,59 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     );
   }
 
+  // ---- Tashih (تصحيح المسألة) ------------------------------------------
+  const positiveEntries = Array.from(finalFractions.entries()).filter(([, fraction]) => fraction.n > 0n);
+  let tashihBase = commonDenominator(positiveEntries.map(([, fraction]) => fraction));
+  for (const [heir, fraction] of positiveEntries) {
+    const groupParts = fraction.n * (tashihBase / fraction.d);
+    const countBig = BigInt(heir.count);
+    if (groupParts % countBig !== 0n) {
+      tashihBase *= countBig / gcdBig(groupParts, countBig);
+    }
+  }
+  if (tashihBase > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return unsupported("The corrected denominator (tashih) exceeds the supported numeric range.", steps);
+  }
+  const tashihParts: TashihPart[] = positiveEntries.map(([heir, fraction]) => {
+    const groupParts = fraction.n * (tashihBase / fraction.d);
+    const partsPerIndividual = groupParts / BigInt(heir.count);
+    return {
+      type: heir.type,
+      count: heir.count,
+      groupParts: Number(groupParts),
+      perIndividualParts: Number(partsPerIndividual),
+    };
+  });
+  const tashih: TashihResult = { base: Number(tashihBase), parts: tashihParts };
+  pushStep({
+    title: "Apply Tashih al-mas'ala (تصحيح المسألة)",
+    calculation: `LCM of denominators = ${tashih.base}; per-individual parts = ${tashihParts.map((p) => `${p.type}:${p.perIndividualParts}`).join(", ")}`,
+    result: `Corrected base = ${tashih.base}`,
+    fiqhPrinciple: INHERITANCE_RULES["INH-TASHIH"].principle,
+    reason: "The base is enlarged until every individual's share is a whole number of parts.",
+    evidence: INHERITANCE_RULES["INH-TASHIH"].evidence,
+    references: ["INH-TASHIH"],
+    notes: tashihParts.map((p) => `${p.type}: ${p.groupParts} part(s), ${p.perIndividualParts} per individual.`),
+  });
+
   // ---- Step 6: final amounts -------------------------------------------
   const allocations = Array.from(finalFractions.entries());
   const amounts = apportion(
     allocations.map(([, fraction]) => fraction),
     netMinor,
   );
-  const amountByHeir = new Map<AllocatedHeir, number>();
-  allocations.forEach(([heir], index) => amountByHeir.set(heir, fromMinorUnits(amounts[index], input.currency)));
+  const amountByHeir = new Map<AllocatedHeir, bigint>();
+  allocations.forEach(([heir], index) => amountByHeir.set(heir, amounts[index]));
 
   const outcomes: HeirOutcome[] = [];
 
   for (const heir of allocated) {
     const fraction = finalFractions.get(heir)!;
     const rule = INHERITANCE_RULES[heir.ruleId];
+    const groupMinor = amountByHeir.get(heir) ?? 0n;
+    const individualMinor = splitEvenly(groupMinor, heir.count)[0];
+    const perIndividualFraction = div(fraction, rational(heir.count));
+    const parts = tashihParts.find((p) => p.type === heir.type);
     outcomes.push({
       type: heir.type,
       count: heir.count,
@@ -502,9 +583,13 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
       principle: rule?.principle ?? "Hanafi inheritance rule",
       referenceIds: [heir.ruleId],
       shareType: heir.shareType,
-      fraction: { numerator: fraction.n.toString(), denominator: fraction.d.toString() },
-      amount: amountByHeir.get(heir),
-      explanation: `${heir.type} (${heir.count}) receives ${fractionToString(fraction)} of the net estate: ${heir.reason}.`,
+      fraction: serializeFraction(fraction),
+      perIndividualFraction: serializeFraction(perIndividualFraction),
+      amount: fromMinorUnits(groupMinor, input.currency),
+      perIndividualAmount: fromMinorUnits(individualMinor, input.currency),
+      parts: parts?.groupParts ?? 0,
+      perIndividualParts: parts?.perIndividualParts ?? 0,
+      explanation: `${heir.type} (${heir.count}) receives ${fractionToString(fraction)} of the net estate (${fractionToString(perIndividualFraction)} each): ${heir.reason}.`,
     });
   }
 
@@ -525,13 +610,19 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
 
   pushStep({
     title: "Final distribution",
-    calculation: outcomes.filter((o) => o.status === "ELIGIBLE").map((o) => `${o.type}=${o.fraction?.numerator}/${o.fraction?.denominator}`).join(", "),
+    calculation: outcomes
+      .filter((o) => o.status === "ELIGIBLE")
+      .map((o) => `${o.type}=${o.fraction?.numerator}/${o.fraction?.denominator}`)
+      .join(", "),
     result: `Total distributed = ${fromMinorUnits(amounts.reduce((a, b) => a + b, 0n), input.currency).toFixed(2)} ${input.currency}`,
     fiqhPrinciple: "Every heir's share is derived from rules and verified to sum exactly to the net estate.",
-    reason: "Currency rounding is applied once, with largest-remainder reconciliation.",
+    reason: "Currency rounding is applied once, with largest-remainder reconciliation; per-individual shares use the tashih parts.",
     evidence: INHERITANCE_RULES["INH-AWL"].evidence,
-    references: ["INH-AWL", "INH-RADD", "INH-ASABAH"],
-    notes: ["This is an academic calculation, not a fatwa."],
+    references: ["INH-AWL", "INH-RADD", "INH-ASABAH", "INH-TASHIH"],
+    notes: [
+      "This is an academic calculation, not a fatwa.",
+      "When a group has several individuals, any indivisible minor unit is assigned to the first individual.",
+    ],
   });
 
   const result: InheritanceCalculationResult = {
@@ -545,7 +636,8 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
     validBequests: fromMinorUnits(validBequestsMinor, input.currency),
     netDistributable: fromMinorUnits(netMinor, input.currency),
     adjustment,
-    baseDenominator: Number(commonDenominator(allFractions)),
+    baseDenominator: tashih.base,
+    tashih,
     outcomes,
     steps,
     notes: [
@@ -555,4 +647,147 @@ export function calculateInheritance(input: InheritanceCalculationInput): Inheri
   };
 
   return result;
+}
+
+/**
+ * Munasakha (المناسخة): process a sequence of deaths where an heir of an
+ * earlier deceased dies before that estate is distributed. The earlier case's
+ * inherited share is added to the later deceased's estate and redistributed
+ * among the later deceased's own heirs.
+ */
+export function calculateMunasakha(input: MunasakhaCalculationInput): MunasakhaEngineResult {
+  const steps: CalculationStepData[] = [];
+  const pushStep = (step: Omit<CalculationStepData, "step">) => {
+    steps.push({ step: steps.length + 1, ...step });
+  };
+
+  if (input.deceased.length === 0) {
+    return unsupported("At least one deceased person is required.", steps);
+  }
+  if (input.deceased.length > 10) {
+    return unsupported("A maximum of ten deceased persons can be processed in one Munasakha case.", steps);
+  }
+  const ids = new Set<string>();
+  for (const person of input.deceased) {
+    if (ids.has(person.id)) {
+      return unsupported("Each deceased person must have a unique identifier.", steps);
+    }
+    ids.add(person.id);
+  }
+
+  const caseResults: MunasakhaCaseResult[] = [];
+  let totalPassedThrough = 0;
+
+  for (let index = 0; index < input.deceased.length; index += 1) {
+    const person = input.deceased[index];
+    const label = person.deceasedName?.trim() || `Deceased ${index + 1}`;
+    let inheritedAmount = 0;
+    let inheritedFrom: MunasakhaCaseResult["inheritedFrom"];
+
+    if (person.inheritsFrom) {
+      const sourceIndex = caseResults.findIndex((c) => c.id === person.inheritsFrom!.fromId);
+      if (sourceIndex === -1) {
+        return unsupported(
+          `${label}: the linked earlier deceased must appear before this person in the list.`,
+          steps,
+        );
+      }
+      const source = caseResults[sourceIndex];
+      const sourceOutcome = source.result.outcomes.find(
+        (o) => o.type === person.inheritsFrom!.heirType && o.status === "ELIGIBLE",
+      );
+      if (!sourceOutcome || sourceOutcome.perIndividualAmount === undefined) {
+        return unsupported(
+          `${label}: the linked heir (${person.inheritsFrom.heirType}) is not an eligible heir in the case of ${source.name?.trim() || `Deceased ${sourceIndex + 1}`}. Add that heir to the earlier case or remove the link.`,
+          steps,
+        );
+      }
+      inheritedAmount = sourceOutcome.perIndividualAmount;
+      totalPassedThrough += inheritedAmount;
+      inheritedFrom = {
+        deceasedId: source.id,
+        deceasedName: source.name,
+        heirType: person.inheritsFrom.heirType,
+      };
+    }
+
+    const caseResult = calculateInheritance({
+      madhhab: input.madhhab,
+      methodologyVersion: input.methodologyVersion,
+      currency: input.currency,
+      deceasedGender: person.deceasedGender,
+      dateOfDeath: person.dateOfDeath,
+      deceasedName: person.deceasedName,
+      grossEstate: (person.grossEstate ?? 0) + inheritedAmount,
+      funeralExpenses: person.funeralExpenses ?? 0,
+      debts: person.debts ?? 0,
+      wasiyyah: person.wasiyyah ?? 0,
+      otherObligations: person.otherObligations ?? 0,
+      heirConsentToWasiyyah: person.heirConsentToWasiyyah,
+      heirs: person.heirs ?? [],
+    });
+    if (!caseResult.supported) {
+      return unsupported(`${label}: ${caseResult.reason}`, steps);
+    }
+
+    caseResults.push({
+      id: person.id,
+      name: person.deceasedName,
+      inheritedAmount,
+      inheritedFrom,
+      result: caseResult,
+    });
+
+    for (const step of caseResult.steps) {
+      pushStep({
+        title: `[${label}] ${step.title}`,
+        calculation: step.calculation,
+        result: step.result,
+        fiqhPrinciple: step.fiqhPrinciple,
+        reason: step.reason,
+        evidence: step.evidence,
+        references: step.references,
+        notes: step.notes,
+        ruleId: step.ruleId,
+      });
+    }
+  }
+
+  const totalNetEstate = caseResults.reduce((acc, c) => acc + c.result.netDistributable, 0);
+  const totalDistributed = totalNetEstate - totalPassedThrough;
+
+  pushStep({
+    title: "Munasakha summary (المناسخة)",
+    calculation: caseResults
+      .map((c, index) => `case ${index + 1}: net ${c.result.netDistributable} ${input.currency}`)
+      .join("; "),
+    result: `Passed to later estates: ${totalPassedThrough.toFixed(2)} ${input.currency}; ultimately distributed: ${totalDistributed.toFixed(2)} ${input.currency}`,
+    fiqhPrinciple: INHERITANCE_RULES["INH-MUNASAKHA"].principle,
+    reason:
+      "Each later estate receives the share inherited from the earlier deceased before its own settlement and distribution.",
+    evidence: INHERITANCE_RULES["INH-MUNASAKHA"].evidence,
+    references: ["INH-MUNASAKHA", "INH-TASHIH"],
+    notes: [
+      "The order of the deceased list is the order of death.",
+      "A linked heir must be one of the eligible heirs of the earlier case.",
+    ],
+    ruleId: "INH-MUNASAKHA",
+  });
+
+  return {
+    supported: true,
+    madhhab: "HANAFI",
+    methodologyVersion: INHERITANCE_METHODOLOGY_VERSION,
+    currency: input.currency,
+    cases: caseResults,
+    totalNetEstate,
+    totalPassedThrough,
+    totalDistributed,
+    steps,
+    notes: [
+      "Munasakha is applied sequentially: the later deceased's estate includes the share inherited from the earlier deceased.",
+      "Amounts passed from one estate to another are not counted twice in the final total.",
+      "This is an academic calculation, not a fatwa.",
+    ],
+  };
 }
