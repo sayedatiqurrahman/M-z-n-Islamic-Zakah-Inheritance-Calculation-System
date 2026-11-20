@@ -1,0 +1,662 @@
+// Mīzān — Islamic Zakah & Inheritance Calculation System
+// Normalized PostgreSQL schema with versioned jurisprudential rules.
+// Every saved calculation retains the MethodologyVersion used at calculation time.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum MadhhabKey {
+  HANAFI
+  SHAFI
+  MALIKI
+  HANBALI
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  REFERENCE_REQUIRED
+  VERIFIED_BY_SCHOLAR
+  NEEDS_REVIEW
+}
+
+enum ImplementationStatus {
+  NOT_IMPLEMENTED
+  IN_PROGRESS
+  IMPLEMENTED
+  DEPRECATED
+}
+
+enum RuleDomain {
+  ZAKAH
+  INHERITANCE
+  SHARED
+}
+
+enum EvidenceType {
+  QURAN
+  HADITH
+  CLASSICAL
+  CONTEMPORARY
+  INSTITUTIONAL
+}
+
+enum AuthenticityStatus {
+  SAHIH
+  HASAN
+  DAIF
+  MAWDU
+  DISPUTED
+  UNVERIFIED
+}
+
+enum NisabMethod {
+  GOLD
+  SILVER
+}
+
+enum Metal {
+  GOLD
+  SILVER
+}
+
+enum PriceSource {
+  LIVE
+  MANUAL
+}
+
+enum ZakahAssetCategory {
+  CASH_HOME
+  CASH_BANK
+  SAVINGS
+  CURRENT_ACCOUNT
+  FOREIGN_CURRENCY
+  DIGITAL_MONEY
+  GOLD_JEWELRY
+  GOLD_INVESTMENT
+  GOLD_BARS
+  GOLD_COINS
+  SILVER_JEWELRY
+  SILVER_INVESTMENT
+  SILVER_BARS
+  BUSINESS_MERCHANDISE
+  BUSINESS_INVENTORY
+  BUSINESS_RECEIVABLE
+  BUSINESS_CASH
+  SHARES_STOCKS
+  OTHER_INVESTMENT
+  OTHER_ASSET
+}
+
+enum LiabilityType {
+  IMMEDIATE_DEBT
+  BUSINESS_LIABILITY
+  OTHER_DEDUCTIBLE
+  LONG_TERM_LOAN
+  NON_DEDUCTIBLE
+}
+
+enum HawlStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  UNKNOWN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum HeirType {
+  HUSBAND
+  WIFE
+  FATHER
+  MOTHER
+  PATERNAL_GRANDFATHER
+  PATERNAL_GRANDMOTHER
+  MATERNAL_GRANDMOTHER
+  SON
+  DAUGHTER
+  SONS_SON
+  SONS_DAUGHTER
+  FULL_BROTHER
+  FULL_SISTER
+  PATERNAL_BROTHER
+  PATERNAL_SISTER
+  MATERNAL_BROTHER
+  MATERNAL_SISTER
+  FULL_BROTHERS_SON
+  PATERNAL_BROTHERS_SON
+  PATERNAL_UNCLE
+  FULL_PATERNAL_UNCLE
+  OTHER_AGNATIC
+  DISTANT_KINDRED
+}
+
+enum HeirStatus {
+  ELIGIBLE
+  EXCLUDED
+  PENDING_VERIFICATION
+}
+
+enum ExclusionKind {
+  NONE
+  PARTIAL
+  COMPLETE
+}
+
+enum ShareType {
+  FIXED
+  RESIDUARY
+  DISTANT_KINDRED
+}
+
+enum AdjustmentType {
+  NONE
+  AWL
+  RADD
+}
+
+enum OwnerType {
+  ZAKAH
+  INHERITANCE
+}
+
+enum Locale {
+  en
+  ar
+  bn
+}
+
+// ---------------------------------------------------------------------------
+// Identity & jurisprudential core
+// ---------------------------------------------------------------------------
+
+model Madhhab {
+  id        String        @id @default(cuid())
+  key       MadhhabKey    @unique
+  nameAr    String
+  nameEn    String
+  nameBn    String
+  enabled   Boolean       @default(false)
+  sortOrder Int           @default(0)
+  versions  MethodologyVersion[]
+  rules     FiqhRule[]
+  zakahCalculations ZakahCalculation[]
+  inheritanceCases  InheritanceCase[]
+
+  @@map("madhhab")
+}
+
+model MethodologyVersion {
+  id          String   @id @default(cuid())
+  madhhabId   String
+  madhhab     Madhhab  @relation(fields: [madhhabId], references: [id])
+  version     String
+  label       String
+  description String?
+  effectiveFrom DateTime @default(now())
+  isActive    Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  rules             FiqhRule[]
+  nisabConfigs      NisabConfiguration[]
+  zakahCalculations ZakahCalculation[]
+  inheritanceCases  InheritanceCase[]
+
+  @@unique([madhhabId, version])
+  @@index([madhhabId, isActive])
+  @@map("methodology_version")
+}
+
+model User {
+  id        String      @id @default(cuid())
+  email     String      @unique
+  name      String?
+  passwordHash String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  profile   UserProfile?
+  zakahCalculations ZakahCalculation[]
+  inheritanceCases  InheritanceCase[]
+
+  @@map("user")
+}
+
+model UserProfile {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locale    Locale  @default(en)
+  currency  String  @default("BDT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profile")
+}
+
+/// Preferences for an anonymous browser session (no account required).
+model AnonymousPreference {
+  id          String      @id @default(cuid())
+  anonymousId String      @unique
+  locale      String      @default("en")
+  currency    String      @default("BDT")
+  nisabMethod NisabMethod @default(SILVER)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("anonymous_preference")
+}
+
+model FiqhRule {
+  id                  String              @id @default(cuid())
+  ruleId              String              @unique // stable human-readable ID e.g. ZAK-NISAB-001
+  madhhabId           String
+  madhhab             Madhhab             @relation(fields: [madhhabId], references: [id])
+  versionId           String
+  version             MethodologyVersion  @relation(fields: [versionId], references: [id])
+  domain              RuleDomain
+  title               String
+  description         String
+  sourceReference     String?
+  externalUrl         String?             // trusted source (e.g. Quranpedia) for full reference
+  verificationStatus  VerificationStatus  @default(UNVERIFIED)
+  implementationStatus ImplementationStatus @default(NOT_IMPLEMENTED)
+  testCases           String[]            // stable test-case IDs
+  notes               String?
+  createdAt           DateTime            @default(now())
+
+  explanations FiqhExplanation[]
+  references   Reference[]
+  quoteEvidence QuranicEvidence[]
+  hadithEvidence HadithEvidence[]
+  steps        CalculationStep[]
+
+  @@index([versionId, domain])
+  @@map("fiqh_rule")
+}
+
+model FiqhExplanation {
+  id          String   @id @default(cuid())
+  ruleId      String
+  rule        FiqhRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  locale      Locale
+  titleAr     String?
+  titleEn     String
+  titleBn     String?
+  definition  String
+  explanation String
+  hanafiRuling String?
+  example     String?
+  notes       String?
+
+  @@unique([ruleId, locale])
+  @@map("fiqh_explanation")
+}
+
+model FiqhTopic {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  category    String   // "ZAKAH" | "INHERITANCE" | "PRINCIPLES"
+  titleAr     String
+  titleEn     String
+  titleBn     String
+  body_en     String
+  body_ar     String?
+  body_bn     String?
+  definition  String?
+  hanafiRuling String?
+  practicalExample String?
+  relatedScenario String?
+  published   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  referenceIds String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([category, published])
+  @@map("fiqh_topic")
+}
+
+model Reference {
+  id              String        @id @default(cuid())
+  type            EvidenceType
+  title           String
+  arabicTitle     String?
+  author          String?
+  volume          String?
+  page            String?
+  chapter         String?
+  publisher       String?
+  edition         String?
+  passage         String?
+  explanationEn   String?
+  explanationBn   String?
+  supportedRuleId String?
+  supportedRule   FiqhRule?     @relation(fields: [supportedRuleId], references: [id])
+  externalUrl     String?       // trusted external resource link
+  verificationStatus VerificationStatus @default(REFERENCE_REQUIRED)
+  createdAt       DateTime      @default(now())
+
+  @@index([type])
+  @@map("reference")
+}
+
+model QuranicEvidence {
+  id              String   @id @default(cuid())
+  surah           String
+  ayahNumber      Int
+  arabicText      String
+  translation     String
+  translationSource String?
+  principle       String?
+  ruleId          String?
+  rule            FiqhRule? @relation(fields: [ruleId], references: [id])
+  externalUrl     String?
+  verificationStatus VerificationStatus @default(REFERENCE_REQUIRED)
+
+  @@unique([surah, ayahNumber])
+  @@map("quranic_evidence")
+}
+
+model HadithEvidence {
+  id              String   @id @default(cuid())
+  collection      String
+  book            String?
+  chapter         String?
+  hadithNumber    String?
+  authenticity    AuthenticityStatus @default(UNVERIFIED)
+  arabicText      String?
+  translation     String
+  ruling          String?
+  ruleId          String?
+  rule            FiqhRule? @relation(fields: [ruleId], references: [id])
+  externalUrl     String?
+  verificationStatus VerificationStatus @default(REFERENCE_REQUIRED)
+
+  @@map("hadith_evidence")
+}
+
+model NisabConfiguration {
+  id                String     @id @default(cuid())
+  versionId         String
+  version           MethodologyVersion @relation(fields: [versionId], references: [id])
+  method            NisabMethod @default(SILVER)
+  goldWeightGrams   Decimal    @default(85)   // classical 20 mithqal — source to be verified
+  silverWeightGrams Decimal    @default(595)  // classical 200 dirhams — source to be verified
+  goldPurity        Decimal    @default(1)
+  silverPurity      Decimal    @default(1)
+  rationale         String?
+  sourceReference   String?
+  externalUrl       String?
+  verificationStatus VerificationStatus @default(REFERENCE_REQUIRED)
+  createdAt         DateTime   @default(now())
+
+  calculations ZakahCalculation[]
+
+  @@index([versionId, method])
+  @@map("nisab_configuration")
+}
+
+model MarketPrice {
+  id         String      @id @default(cuid())
+  metal      Metal
+  pricePerGram Decimal
+  currency   String
+  source     String
+  sourceUrl  String?
+  isManual   Boolean     @default(true)
+  recordedAt DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+
+  calculations ZakahCalculation[]
+
+  @@index([metal, recordedAt])
+  @@map("market_price")
+}
+
+// ---------------------------------------------------------------------------
+// Zakah
+// ---------------------------------------------------------------------------
+
+model ZakahCalculation {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  anonymousId     String?
+  title           String?
+  madhhabId       String
+  madhhab         Madhhab  @relation(fields: [madhhabId], references: [id])
+  versionId       String
+  version         MethodologyVersion @relation(fields: [versionId], references: [id])
+  nisabConfigId   String?
+  nisabConfig     NisabConfiguration? @relation(fields: [nisabConfigId], references: [id])
+  marketPriceId   String?
+  marketPrice     MarketPrice? @relation(fields: [marketPriceId], references: [id])
+  currency        String
+  assessmentDate  DateTime
+  nisabFirstReachedDate DateTime?
+  previousZakahDate DateTime?
+  hijriAssessmentDate String?
+  inputSnapshot   Json
+  unsupportedReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assets   ZakahAsset[]
+  liabilities ZakahLiability[]
+  result   ZakahResult?
+  steps    CalculationStep[]
+
+  @@index([userId, createdAt])
+  @@index([anonymousId, createdAt])
+  @@map("zakah_calculation")
+}
+
+model ZakahAsset {
+  id            String   @id @default(cuid())
+  calculationId String
+  calculation   ZakahCalculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
+  category      ZakahAssetCategory
+  label         String?
+  amount        Decimal
+  weightGrams   Decimal?
+  purity        Decimal?
+  marketValue   Decimal
+  currency      String
+  convertedValue Decimal
+  ruleId        String?
+  included      Boolean  @default(true)
+  reason        String?
+
+  @@index([calculationId])
+  @@map("zakah_asset")
+}
+
+model ZakahLiability {
+  id            String   @id @default(cuid())
+  calculationId String
+  calculation   ZakahCalculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
+  type          LiabilityType
+  label         String?
+  amount        Decimal
+  currency      String
+  convertedValue Decimal
+  deductible    Boolean  @default(false)
+  ruleId        String?
+  reason        String?
+
+  @@index([calculationId])
+  @@map("zakah_liability")
+}
+
+model ZakahResult {
+  id             String   @id @default(cuid())
+  calculationId  String   @unique
+  calculation    ZakahCalculation @relation(fields: [calculationId], references: [id], onDelete: Cascade)
+  totalAssets    Decimal
+  totalDeductible Decimal
+  netWealth      Decimal
+  nisabValue     Decimal
+  nisabReached   Boolean
+  hawlStatus     HawlStatus
+  rate           Decimal  @default(0.025)
+  zakahPayable   Decimal
+  currency       String
+
+  @@map("zakah_result")
+}
+
+// ---------------------------------------------------------------------------
+// Inheritance
+// ---------------------------------------------------------------------------
+
+model InheritanceCase {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  anonymousId     String?
+  title           String?
+  madhhabId       String
+  madhhab         Madhhab  @relation(fields: [madhhabId], references: [id])
+  versionId       String
+  version         MethodologyVersion @relation(fields: [versionId], references: [id])
+  currency        String
+  inputSnapshot   Json
+  unsupportedReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  deceased  DeceasedPerson?
+  heirs     Heir[]
+  result    InheritanceResult?
+  steps     CalculationStep[]
+
+  @@index([userId, createdAt])
+  @@index([anonymousId, createdAt])
+  @@map("inheritance_case")
+}
+
+model DeceasedPerson {
+  id            String   @id @default(cuid())
+  caseId        String   @unique
+  case          InheritanceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  name          String?
+  gender        Gender
+  dateOfDeath   DateTime
+  movableAssets Decimal  @default(0)
+  immovableAssets Decimal @default(0)
+  cashAndBank   Decimal  @default(0)
+  businessAssets Decimal @default(0)
+  otherAssets   Decimal  @default(0)
+  funeralExpenses Decimal @default(0)
+  debts         Decimal  @default(0)
+  wasiyyah      Decimal  @default(0)
+  otherObligations Decimal @default(0)
+  heirConsentToWasiyyah Boolean @default(false)
+  currency      String
+
+  @@map("deceased_person")
+}
+
+model Heir {
+  id             String   @id @default(cuid())
+  caseId         String
+  case           InheritanceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  type           HeirType
+  count          Int      @default(1)
+  status         HeirStatus @default(PENDING_VERIFICATION)
+  exclusionKind  ExclusionKind @default(NONE)
+  excludedById   String?
+  reason         String?
+  principle      String?
+  referenceUrl   String?
+  ruleId         String?
+  createdAt      DateTime @default(now())
+
+  share InheritanceShare?
+
+  @@index([caseId])
+  @@map("heir")
+}
+
+model InheritanceResult {
+  id              String   @id @default(cuid())
+  caseId          String   @unique
+  case            InheritanceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  grossEstate     Decimal
+  funeralExpenses Decimal
+  debts           Decimal
+  validBequests   Decimal
+  netDistributable Decimal
+  adjustment      AdjustmentType @default(NONE)
+  baseNumerator   Int      @default(1)
+  baseDenominator Int      @default(1)
+  currency        String
+  createdAt       DateTime @default(now())
+
+  shares InheritanceShare[]
+
+  @@map("inheritance_result")
+}
+
+model InheritanceShare {
+  id             String   @id @default(cuid())
+  resultId       String
+  result         InheritanceResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  heirId         String   @unique
+  heir           Heir     @relation(fields: [heirId], references: [id], onDelete: Cascade)
+  shareType      ShareType
+  numerator      Int
+  denominator    Int
+  adjustedNumerator Int
+  adjustedDenominator Int
+  amount         Decimal
+  currency       String
+  reasonRuleId   String?
+  explanation    String?
+
+  @@index([resultId])
+  @@map("inheritance_share")
+}
+
+// ---------------------------------------------------------------------------
+// Explanation engine output (shared)
+// ---------------------------------------------------------------------------
+
+model CalculationStep {
+  id            String   @id @default(cuid())
+  ownerType     OwnerType
+  zakahCalculationId String?
+  zakahCalc     ZakahCalculation? @relation(fields: [zakahCalculationId], references: [id], onDelete: Cascade)
+  inheritanceCaseId String?
+  inheritanceCase InheritanceCase? @relation(fields: [inheritanceCaseId], references: [id], onDelete: Cascade)
+  step          Int
+  title         String
+  calculation   String
+  result        String
+  fiqhPrinciple String?
+  reason        String?
+  evidence      Json     @default("[]")
+  references    Json     @default("[]")
+  notes         String[]
+  /// Human-readable rule identifier (e.g. ZAK-NISAB-001) linked to the
+  /// registry's stable natural key rather than its surrogate primary key.
+  ruleId        String?
+  rule          FiqhRule? @relation(fields: [ruleId], references: [ruleId])
+
+  @@index([ownerType, zakahCalculationId])
+  @@index([ownerType, inheritanceCaseId])
+  @@map("calculation_step")
+}

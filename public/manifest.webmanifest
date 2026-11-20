@@ -1,0 +1,26 @@
+{
+  "name": "Mīzān — Islamic Zakah & Inheritance",
+  "short_name": "Mīzān",
+  "description": "An academic Hanafi system for Zakah and Islamic inheritance with step-by-step evidence.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8faf9",
+  "theme_color": "#047857",
+  "categories": ["education", "finance", "books"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
