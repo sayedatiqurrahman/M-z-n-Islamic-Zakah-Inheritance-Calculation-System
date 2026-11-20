@@ -43,3 +43,8 @@ next-env.d.ts
 
 # generated prisma client (run `npm run prisma:generate`)
 /src/generated
+
+# Internal docs and agent instructions (keep local, do not publish)
+/AGENTS.md
+/agent.md
+/docs/*.md
