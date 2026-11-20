@@ -52,12 +52,13 @@ export function NisabCalculator() {
     window.localStorage.setItem(
       "mizan:apply-nisab",
       JSON.stringify({
-        goldPricePerGram: goldPrice,
-        silverPricePerGram: silverPrice,
-        priceSource: source,
+        gold: goldPrice,
+        silver: silverPrice,
+        source,
+        sourceUrl: "",
         recordedAt,
         currency,
-      }),
+      } satisfies AppliedMetalPrices & { currency: string }),
     );
     router.push("/zakah");
   };

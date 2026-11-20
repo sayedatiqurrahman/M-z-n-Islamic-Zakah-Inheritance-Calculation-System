@@ -17,10 +17,12 @@ isolated by an opaque, HTTP-only browser cookie.
 
 ## Features
 
-- **Zakah calculator** — classifies cash, bank balances, gold, silver, business
-  assets and liabilities; compares net wealth with a configurable gold or
-  silver Nisab; evaluates Hawl using a Hijri calendar; applies 2.5% only when
-  every documented condition is satisfied.
+- **Zakah calculator** — starts with money, then classifies cash, bank balances,
+  gold, silver, business assets and liabilities; compares net wealth with a
+  configurable gold or silver Nisab; evaluates Hawl using a Hijri calendar;
+  applies 2.5% only when every documented condition is satisfied. Livestock and
+  crops use separately labelled classical in-kind schedules, and the eight
+  recipient purposes from Qur'an 9:60 are shown with their sources.
 - **Inheritance calculator** — Hanafi fixed shares (`aṣḥāb al-furūḍ`),
   residuary heirs (`ʿaṣabah`), complete/partial exclusion (`ḥajb`), `ʿAwl`,
   `Radd` and `Tashih` corrected bases, with exact BigInt rational arithmetic
@@ -34,7 +36,9 @@ isolated by an opaque, HTTP-only browser cookie.
 - **Nisab workspace** — classical weights, live metal valuation and a manual
   valuation mode with a recorded source.
 - **Live gold and silver prices** — retrieved by the backend at request time,
-  never hard-coded, with original vs updated comparison.
+  never hard-coded, with original vs updated comparison. The Zakah calculator
+  auto-applies each successful quote pair to its Nisab inputs; the Nisab
+  workspace can hand prices to it as well.
 - **162 world currencies** — searchable dropdown, names fetched online, BDT as
   default, ISO 4217 minor units.
 - **Learning center** — 28 structured topics across Zakah, inheritance and
@@ -43,9 +47,9 @@ isolated by an opaque, HTTP-only browser cookie.
   Saving and PDF export currently accept single-deceased calculations;
   multi-deceased (Munasakha) results are shown for review with a localized
   notice. See `docs/INHERITANCE_CALCULATION.md`.
-- **Three languages** — English (default), Arabic (RTL) and Bangla, with the
-  Hind Siliguri font for Bangla. No runtime i18n package: every string lives in
-  one central JSON catalog per language.
+- **Three languages** — English (default, Poppins), Arabic (RTL, Noto Naskh
+  Arabic) and Bangla (Hind Siliguri across the whole app). No runtime i18n
+  package: every string lives in one central JSON catalog per language.
 - **Dark mode, mobile-first app shell, PWA manifest.**
 
 ## Technology

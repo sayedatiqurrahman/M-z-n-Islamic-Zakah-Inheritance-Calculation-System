@@ -3,14 +3,19 @@ import { unsupported, type CalculationStepData, type UnsupportedResult } from "@
 import { hawlCompleted, formatHijri, gregorianToHijri } from "@/lib/hijri";
 import {
   ASSET_POLICIES,
+  CROP_SCHEDULES,
   LIABILITY_POLICIES,
+  LIVESTOCK_SCHEDULES,
   ZAKAH_METHODOLOGY_VERSION,
   ZAKAH_RATE,
+  ZAKAH_RECIPIENT_PURPOSES,
   ZAKAH_RULES,
 } from "./rules";
 import type {
   ClassifiedAsset,
   ClassifiedLiability,
+  InKindDue,
+  ZakahAssetInput,
   ZakahCalculationInput,
   ZakahCalculationResult,
 } from "./types";
@@ -21,7 +26,7 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function assetValue(input: ZakahCalculationInput, asset: ZakahCalculationInput["assets"][number]): number {
+function assetValue(input: ZakahCalculationInput, asset: ZakahAssetInput): number {
   const isMetal = asset.category.startsWith("GOLD") || asset.category.startsWith("SILVER");
   if (isMetal && asset.weightGrams && asset.purity !== undefined) {
     const pricePerGram =
@@ -30,6 +35,110 @@ function assetValue(input: ZakahCalculationInput, asset: ZakahCalculationInput["
   }
   const base = asset.marketValue ?? asset.amount ?? 0;
   return base * asset.conversionRateToBase;
+}
+
+type InKindComputation = { due: InKindDue } | { refusal: string };
+
+/**
+ * Resolve one asset through its in-kind schedule. Refusals are returned rather
+ * than thrown so the pure engine can report the completed steps alongside them.
+ */
+function computeInKindDue(input: ZakahCalculationInput, asset: ZakahAssetInput): InKindComputation {
+  const quantity = asset.quantity ?? 0;
+  const label = asset.label ?? asset.category;
+
+  if (asset.category in LIVESTOCK_SCHEDULES) {
+    const schedule = LIVESTOCK_SCHEDULES[asset.category as keyof typeof LIVESTOCK_SCHEDULES];
+    if (quantity > schedule.maxSupported) {
+      return {
+        refusal:
+          `${label}: ${quantity} head is above the encoded classical schedule (maximum ${schedule.maxSupported}). ` +
+          "This range requires scholarly verification before a due can be stated.",
+      };
+    }
+    const nisabReached = quantity >= schedule.nisab;
+    const tier = nisabReached
+      ? schedule.tiers.find((item) => quantity >= item.min && (item.max === null || quantity <= item.max))
+      : undefined;
+    if (nisabReached && !tier) {
+      return {
+        refusal: `${label}: no schedule tier matches ${quantity} head. The case requires scholarly verification.`,
+      };
+    }
+    let dueQuantity = tier?.dueQuantity ?? 0;
+    if (tier?.perHeads && tier.perDueQuantity) {
+      dueQuantity += Math.floor((quantity - tier.min) / tier.perHeads) * tier.perDueQuantity;
+    }
+    const estimatedValue =
+      asset.unitValue !== undefined
+        ? round(dueQuantity * asset.unitValue * asset.conversionRateToBase)
+        : null;
+    return {
+      due: {
+        id: asset.id,
+        category: asset.category,
+        label,
+        quantity,
+        unit: "head",
+        nisabQuantity: schedule.nisab,
+        nisabReached,
+        rate: null,
+        dueDescription: nisabReached ? tier!.dueDescription : "Below nisab — no zakah due",
+        dueQuantity: nisabReached ? dueQuantity : 0,
+        dueUnit: "head",
+        estimatedValue,
+        ruleId: schedule.ruleId,
+        verification: schedule.verification,
+        explanation: `${schedule.explanation} Nisab: ${schedule.nisab} head.`,
+      },
+    };
+  }
+
+  if (asset.category in CROP_SCHEDULES) {
+    const schedule = CROP_SCHEDULES[asset.category as keyof typeof CROP_SCHEDULES];
+    if (!asset.irrigation) {
+      return {
+        refusal: `${label}: the irrigation method must be supplied to select the 10% or 5% crop rate.`,
+      };
+    }
+    const rate = schedule.rates[asset.irrigation];
+    if (rate === undefined) {
+      return {
+        refusal:
+          `${label}: mixed irrigation has no verified rate in this engine. ` +
+          "Enter the rain-fed and irrigated portions as separate assets or consult a scholar.",
+      };
+    }
+    const nisabReached = quantity >= schedule.nisabKg;
+    const dueQuantity = nisabReached ? round(quantity * rate) : 0;
+    const estimatedValue =
+      asset.unitValue !== undefined
+        ? round(dueQuantity * asset.unitValue * asset.conversionRateToBase)
+        : null;
+    return {
+      due: {
+        id: asset.id,
+        category: asset.category,
+        label,
+        quantity,
+        unit: "kg",
+        nisabQuantity: schedule.nisabKg,
+        nisabReached,
+        rate,
+        dueDescription: nisabReached
+          ? `${(rate * 100).toFixed(0)}% of ${quantity} kg = ${dueQuantity.toFixed(2)} kg`
+          : "Below nisab — no zakah due",
+        dueQuantity,
+        dueUnit: "kg",
+        estimatedValue,
+        ruleId: schedule.ruleId,
+        verification: schedule.verification,
+        explanation: `${schedule.explanation} Irrigation: ${asset.irrigation}.`,
+      },
+    };
+  }
+
+  return { refusal: `${label}: ${asset.category} has no encoded in-kind schedule.` };
 }
 
 /**
@@ -103,12 +212,15 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
       included: policy.included,
       ruleId: policy.ruleId,
       reason: policy.reason,
+      valuationMode: policy.mode ?? "MONETARY",
+      quantity: asset.quantity,
     };
   });
 
   const unverifiedAssets = classifiedAssets.filter((asset) => {
     const policy = ASSET_POLICIES[asset.category];
-    return policy.verification === "UNVERIFIED" && asset.valueInBase > 0;
+    const positiveQuantity = (asset.quantity ?? 0) > 0;
+    return policy.verification === "UNVERIFIED" && (asset.valueInBase > 0 || positiveQuantity);
   });
   if (unverifiedAssets.length > 0) {
     return unsupported(
@@ -130,7 +242,11 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
     references: includedAssets.map((a) => a.ruleId!).filter(Boolean),
     notes: classifiedAssets
       .filter((a) => !a.included)
-      .map((a) => `${a.label} excluded: ${a.reason}`),
+      .map((a) =>
+        a.valuationMode === "IN_KIND"
+          ? `${a.label} assessed by in-kind schedule, not added to monetary wealth.`
+          : `${a.label} excluded: ${a.reason}`,
+      ),
   });
 
   // Step 4 — liabilities
@@ -249,10 +365,10 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
     );
   }
 
-  // Step 8 — final obligation
+  // Step 8 — final monetary obligation
   const zakahPayable = nisabReached && hawlDone ? round(netWealth * ZAKAH_RATE) : 0;
   pushStep({
-    title: "Calculate the final Zakah obligation",
+    title: "Calculate the final monetary Zakah obligation",
     calculation:
       nisabReached && hawlDone
         ? `${netWealth.toFixed(2)} × ${(ZAKAH_RATE * 100).toFixed(1)}%`
@@ -262,7 +378,7 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
     reason:
       nisabReached && hawlDone
         ? "All documented conditions are satisfied."
-        : "The Nisab and/or Hawl condition is not satisfied, so no zakah is due.",
+        : "The Nisab and/or Hawl condition is not satisfied, so no monetary zakah is due.",
     evidence: ZAKAH_RULES["ZAK-RATE"].evidence,
     references: ["ZAK-RATE"],
     notes: [
@@ -270,6 +386,79 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
       "Methodology version: " + ZAKAH_METHODOLOGY_VERSION,
     ],
     ruleId: "ZAK-RATE",
+  });
+
+  // In-kind schedules — evaluated independently of the monetary nisab.
+  const inKindDues: InKindDue[] = [];
+  for (const asset of input.assets) {
+    if (ASSET_POLICIES[asset.category].mode !== "IN_KIND") continue;
+    if ((asset.quantity ?? 0) <= 0) continue;
+    const computed = computeInKindDue(input, asset);
+    if ("refusal" in computed) {
+      return unsupported(computed.refusal, steps);
+    }
+    inKindDues.push(computed.due);
+  }
+
+  const totalInKindValue = round(
+    inKindDues.reduce((sum, due) => sum + (due.estimatedValue ?? 0), 0),
+  );
+
+  if (inKindDues.length > 0) {
+    pushStep({
+      title: "Calculate in-kind zakah (livestock and crops)",
+      calculation:
+        inKindDues
+          .map((due) => `${due.label}: ${due.quantity} ${due.unit} → ${due.dueDescription}`)
+          .join("; ") || "0",
+      result:
+        `In-kind dues stated separately; estimated value ${totalInKindValue.toFixed(2)} ${input.currency}`,
+      fiqhPrinciple:
+        `${ZAKAH_RULES["ZAK-LIVESTOCK-SCHEDULE"].principle} ${ZAKAH_RULES["ZAK-CROP-SCHEDULE"].principle}`,
+      reason:
+        "Livestock and crops are assessed by their own classical schedules and nisab; 2.5% is never applied to them as if they were money.",
+      evidence: [
+        ...ZAKAH_RULES["ZAK-LIVESTOCK-SCHEDULE"].evidence,
+        ...ZAKAH_RULES["ZAK-CROP-SCHEDULE"].evidence,
+      ],
+      references: [...new Set(inKindDues.map((due) => due.ruleId))],
+      notes: [
+        ...inKindDues.map((due) => `${due.label}: ${due.explanation}`),
+        "All in-kind schedules in this engine are NEEDS_REVIEW; verify the tier against a cited source.",
+        ...inKindDues
+          .filter((due) => due.estimatedValue === null)
+          .map((due) => `${due.label}: no unit value supplied, so only the in-kind due is stated.`),
+      ],
+      ruleId: "ZAK-IN-KIND-TOTAL",
+    });
+
+    pushStep({
+      title: "Combine monetary and in-kind results",
+      calculation: `${zakahPayable.toFixed(2)} + ${totalInKindValue.toFixed(2)}`,
+      result: `Estimated total = ${round(zakahPayable + totalInKindValue).toFixed(2)} ${input.currency}`,
+      fiqhPrinciple: ZAKAH_RULES["ZAK-IN-KIND-TOTAL"].principle,
+      reason:
+        "The sum is a reporting convenience. The in-kind dues retain their own nisab and timing and are not converted into a single legal ruling.",
+      evidence: ZAKAH_RULES["ZAK-IN-KIND-TOTAL"].evidence,
+      references: ["ZAK-IN-KIND-TOTAL"],
+      notes: [ZAKAH_RULES["ZAK-IN-KIND-TOTAL"].note ?? ""],
+      ruleId: "ZAK-IN-KIND-TOTAL",
+    });
+  }
+
+  pushStep({
+    title: "List the eight recipient purposes of zakah",
+    calculation: `${ZAKAH_RECIPIENT_PURPOSES.length} purposes from Qur'an 9:60`,
+    result: ZAKAH_RECIPIENT_PURPOSES.map((purpose) => `${purpose.arabic} (${purpose.label})`).join(", "),
+    fiqhPrinciple: ZAKAH_RULES["ZAK-RECIPIENTS"].principle,
+    reason: "Informational only; this calculation does not decide whether a specific recipient is eligible.",
+    evidence: ZAKAH_RULES["ZAK-RECIPIENTS"].evidence,
+    references: ["ZAK-RECIPIENTS"],
+    notes: [
+      ...ZAKAH_RECIPIENT_PURPOSES.map((purpose) => `${purpose.label}: ${purpose.explanation}`),
+      "Recipient interpretations are NEEDS_REVIEW and require a scholar's ruling for actual disbursement.",
+    ],
+    ruleId: "ZAK-RECIPIENTS",
   });
 
   return {
@@ -286,12 +475,17 @@ export function calculateZakah(input: ZakahCalculationInput): ZakahEngineResult 
     hawlCompleted: hawlDone,
     rate: ZAKAH_RATE,
     zakahPayable,
+    totalInKindValue,
+    totalPayable: round(zakahPayable + totalInKindValue),
+    inKindDues,
+    recipientPurposes: ZAKAH_RECIPIENT_PURPOSES,
     classifiedAssets,
     classifiedLiabilities,
     steps,
     notes: [
       "No contemporary gold/silver price is fabricated: prices are supplied by a declared source or manually.",
       "All verification statuses are visible in the References section.",
+      "In-kind dues use NEEDS_REVIEW classical schedules with their own nisab; consult a qualified scholar.",
     ],
   };
 }

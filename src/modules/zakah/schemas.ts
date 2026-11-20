@@ -6,6 +6,9 @@ const assetCategory = z.enum([
   "SILVER_JEWELRY", "SILVER_INVESTMENT", "SILVER_BARS",
   "BUSINESS_MERCHANDISE", "BUSINESS_INVENTORY", "BUSINESS_RECEIVABLE", "BUSINESS_CASH",
   "SHARES_STOCKS", "OTHER_INVESTMENT", "OTHER_ASSET",
+  "LIVESTOCK_CAMEL", "LIVESTOCK_CATTLE", "LIVESTOCK_GOAT_SHEEP",
+  "CROP_WHEAT", "CROP_BARLEY", "CROP_DATES", "CROP_GRAPES", "CROP_OTHER",
+  "MINERALS_TREASURE",
 ]);
 
 const liabilityType = z.enum([
@@ -25,6 +28,9 @@ export const zakahAssetSchema = z.object({
   marketValue: money.optional(),
   currency: z.string().min(3).max(4),
   conversionRateToBase: rate,
+  quantity: money.optional(),
+  unitValue: money.optional(),
+  irrigation: z.enum(["RAIN_FED", "IRRIGATED", "MIXED"]).optional(),
 });
 
 export const zakahLiabilitySchema = z.object({

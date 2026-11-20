@@ -48,8 +48,27 @@ export async function POST(request: Request) {
             { label: "Nisab reached", value: result.nisabReached ? "Yes" : "No" },
             { label: "Hawl completed", value: result.hawlCompleted ? "Yes" : "No" },
             { label: "Rate", value: "2.5%" },
-            { label: "Zakah payable", value: formatAmount(result.zakahPayable, result.currency) },
+            { label: "Monetary zakah payable", value: formatAmount(result.zakahPayable, result.currency) },
+            { label: "Estimated in-kind value", value: formatAmount(result.totalInKindValue, result.currency) },
+            { label: "Estimated total payable", value: formatAmount(result.totalPayable, result.currency) },
           ],
+        },
+        {
+          heading: "In-kind dues (NEEDS_REVIEW schedules)",
+          rows:
+            result.inKindDues.length > 0
+              ? result.inKindDues.map((due) => ({
+                  label: `${due.label} — ${due.quantity} ${due.unit}`,
+                  value: `${due.dueDescription} (${due.ruleId}, ${due.verification}; ${due.explanation})${due.estimatedValue === null ? "" : ` ≈ ${formatAmount(due.estimatedValue, result.currency)}`}`,
+                }))
+              : [{ label: "In-kind", value: "None entered" }],
+        },
+        {
+          heading: "Recipient purposes — Qur'an 9:60 (NEEDS_REVIEW)",
+          rows: result.recipientPurposes.map((purpose) => ({
+            label: `${purpose.arabic} — ${purpose.label}`,
+            value: purpose.explanation,
+          })),
         },
         {
           heading: "Asset classification",

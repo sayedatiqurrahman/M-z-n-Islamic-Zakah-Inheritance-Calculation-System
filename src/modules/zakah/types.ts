@@ -1,4 +1,4 @@
-import type { CalculationStepData } from "@/modules/fiqh/types";
+import type { CalculationStepData, EvidenceReference, VerificationStatus } from "@/modules/fiqh/types";
 
 export type ZakahAssetCategory =
   | "CASH_HOME"
@@ -20,7 +20,16 @@ export type ZakahAssetCategory =
   | "BUSINESS_CASH"
   | "SHARES_STOCKS"
   | "OTHER_INVESTMENT"
-  | "OTHER_ASSET";
+  | "OTHER_ASSET"
+  | "LIVESTOCK_CAMEL"
+  | "LIVESTOCK_CATTLE"
+  | "LIVESTOCK_GOAT_SHEEP"
+  | "CROP_WHEAT"
+  | "CROP_BARLEY"
+  | "CROP_DATES"
+  | "CROP_GRAPES"
+  | "CROP_OTHER"
+  | "MINERALS_TREASURE";
 
 export type LiabilityType =
   | "IMMEDIATE_DEBT"
@@ -30,6 +39,9 @@ export type LiabilityType =
   | "NON_DEDUCTIBLE";
 
 export type NisabMethod = "GOLD" | "SILVER";
+
+/** Irrigation method for crop zakah. `MIXED` deliberately has no encoded rate. */
+export type IrrigationType = "RAIN_FED" | "IRRIGATED" | "MIXED";
 
 export interface ZakahAssetInput {
   id: string;
@@ -44,6 +56,12 @@ export interface ZakahAssetInput {
   currency: string;
   /** Units of base currency per one unit of this asset currency. */
   conversionRateToBase: number;
+  /** Head count for livestock, kilograms for crops. Used only by in-kind schedules. */
+  quantity?: number;
+  /** Estimated local value of one head/kilogram, used only to express an in-kind due in money. */
+  unitValue?: number;
+  /** Crop irrigation method; selects the classical 10% / 5% rate. */
+  irrigation?: IrrigationType;
 }
 
 export interface ZakahLiabilityInput {
@@ -99,6 +117,10 @@ export interface ClassifiedAsset {
   included: boolean;
   ruleId?: string;
   reason: string;
+  /** In-kind categories are classified separately and never enter monetary wealth. */
+  valuationMode: "MONETARY" | "IN_KIND";
+  /** Head count / kilograms as entered, retained for the result view. */
+  quantity?: number;
 }
 
 export interface ClassifiedLiability {
@@ -109,6 +131,39 @@ export interface ClassifiedLiability {
   deductible: boolean;
   ruleId?: string;
   reason: string;
+}
+
+/** One in-kind zakah obligation derived from a classical schedule. */
+export interface InKindDue {
+  id: string;
+  category: ZakahAssetCategory;
+  label: string;
+  quantity: number;
+  unit: "head" | "kg";
+  nisabQuantity: number;
+  nisabReached: boolean;
+  /** Crop rate (0.05 / 0.10); null for schedule-based livestock. */
+  rate: number | null;
+  /** Human-readable schedule outcome, e.g. "1 one-year-old calf". */
+  dueDescription: string;
+  /** Count of animals or kilograms due; null only when not calculable. */
+  dueQuantity: number | null;
+  dueUnit: "head" | "kg";
+  /** Money estimate, null when no unit value was supplied. */
+  estimatedValue: number | null;
+  ruleId: string;
+  verification: VerificationStatus;
+  explanation: string;
+}
+
+/** One of the eight recipient purposes of zakah in Qur'an 9:60. */
+export interface ZakahRecipientPurpose {
+  id: string;
+  arabic: string;
+  label: string;
+  explanation: string;
+  verification: VerificationStatus;
+  evidence: EvidenceReference[];
 }
 
 export interface ZakahCalculationResult {
@@ -124,7 +179,14 @@ export interface ZakahCalculationResult {
   nisabReached: boolean;
   hawlCompleted: boolean;
   rate: number;
+  /** Monetary zakah (2.5% of net wealth). */
   zakahPayable: number;
+  /** Sum of the money estimates of all in-kind dues (0 when no unit values supplied). */
+  totalInKindValue: number;
+  /** Monetary zakah plus the estimated value of in-kind dues. */
+  totalPayable: number;
+  inKindDues: InKindDue[];
+  recipientPurposes: ZakahRecipientPurpose[];
   classifiedAssets: ClassifiedAsset[];
   classifiedLiabilities: ClassifiedLiability[];
   steps: CalculationStepData[];

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Noto_Naskh_Arabic, Hind_Siliguri } from "next/font/google";
+import { Poppins, Noto_Naskh_Arabic, Hind_Siliguri } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,11 +7,17 @@ import { LocaleProvider } from "@/components/layout/locale-provider";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AppShell } from "@/components/layout/app-shell";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-// Variable names intentionally differ from the CSS theme tokens they feed.
-// Reusing `--font-arabic` / `--font-bengali` here creates a circular
-// `var(--x): var(--x)` definition in the generated stylesheet, which makes
-// browsers fall back to the generic family and breaks Bangla/Arabic rendering.
+// Poppins renders English; Hind Siliguri is the global Bangla fallback and the
+// primary face whenever the Bangla locale is active. Variable names
+// intentionally differ from the CSS theme tokens they feed: reusing
+// `--font-arabic` / `--font-bengali` here would create a circular
+// `var(--x): var(--x)` definition and break non-Latin rendering.
+const poppins = Poppins({
+  subsets: ["latin"],
+  variable: "--font-poppins",
+  display: "swap",
+  weight: ["300", "400", "500", "600", "700"],
+});
 const notoArabic = Noto_Naskh_Arabic({
   subsets: ["arabic"],
   variable: "--font-noto-arabic",
@@ -62,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${notoArabic.variable} ${hindSiliguri.variable} min-h-dvh antialiased`}
+        className={`${poppins.variable} ${notoArabic.variable} ${hindSiliguri.variable} min-h-dvh antialiased`}
       >
         <ThemeProvider>
           <LocaleProvider>

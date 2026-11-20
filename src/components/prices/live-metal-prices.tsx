@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- This component synchronises state with an external system (localStorage hydration or a network fetch) on mount. The effect is one-shot initialisation, which is the documented React pattern for external stores. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -23,6 +23,8 @@ import type { AppliedMetalPrices, MetalQuote, MetalQuotesResponse } from "@/modu
 interface LiveMetalPricesProps {
   currency: string;
   onApply?: (prices: AppliedMetalPrices) => void;
+  /** Apply each successfully fetched quote pair to the caller automatically. */
+  autoApply?: boolean;
   className?: string;
 }
 
@@ -98,15 +100,23 @@ function MetalCard({ quote }: { quote: MetalQuote }) {
   );
 }
 
-export function LiveMetalPrices({ currency, onApply, className }: LiveMetalPricesProps) {
+export function LiveMetalPrices({ currency, onApply, autoApply = false, className }: LiveMetalPricesProps) {
   const { t } = useLocale();
   const [data, setData] = useState<MetalQuotesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const onApplyRef = useRef(onApply);
+  const lastAutoAppliedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onApplyRef.current = onApply;
+  }, [onApply]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // A new currency means a new quote pair; allow auto-apply again.
+    lastAutoAppliedRef.current = null;
     try {
       const response = await fetch(`/api/prices?currency=${encodeURIComponent(currency)}`, {
         cache: "no-store",
@@ -132,6 +142,20 @@ export function LiveMetalPrices({ currency, onApply, className }: LiveMetalPrice
   const silver = data?.quotes.find((quote) => quote.metal === "SILVER");
   const canApply = Boolean(onApply && gold && silver);
 
+  useEffect(() => {
+    if (!autoApply || !gold || !silver) return;
+    const signature = `${gold.fetchedAt}|${silver.fetchedAt}|${gold.pricePerGram}|${silver.pricePerGram}|${currency}`;
+    if (lastAutoAppliedRef.current === signature) return;
+    lastAutoAppliedRef.current = signature;
+    onApplyRef.current?.({
+      gold: gold.pricePerGram,
+      silver: silver.pricePerGram,
+      source: `${gold.source} — ${t("prices.retrievedAt", { date: formatDateTime(gold.fetchedAt) })}`,
+      sourceUrl: gold.sourceUrl,
+      recordedAt: gold.fetchedAt,
+    });
+  }, [autoApply, currency, gold, silver, t]);
+
   return (
     <Card className={cn("border-emerald-100", className)}>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-3">
@@ -142,6 +166,11 @@ export function LiveMetalPrices({ currency, onApply, className }: LiveMetalPrice
           <p className="mt-1 text-xs text-muted-foreground">
             {t("prices.subtitle", { currency })}
           </p>
+          {autoApply && data && (
+            <p className="mt-1 text-[11px] font-medium text-emerald-700">
+              {t("prices.autoApplied")}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="border-emerald-200 text-emerald-800">

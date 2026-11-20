@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2, Calculator, CircleAlert, Loader2, Save, Download } from "lucide-react";
+import { Plus, Trash2, Calculator, CircleAlert, Loader2, Save, Download, Wallet, Sprout } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { zakahRequestSchema, type ZakahRequest } from "@/modules/zakah/schemas";
-import { ZAKAH_METHODOLOGY_VERSION } from "@/modules/zakah/rules";
-import type { ZakahCalculationResult } from "@/modules/zakah/types";
+import { ZAKAH_METHODOLOGY_VERSION, ZAKAH_RECIPIENT_PURPOSES } from "@/modules/zakah/rules";
+import { EVIDENCE } from "@/modules/fiqh/evidences/catalog";
+import type { InKindDue, ZakahCalculationResult, ZakahAssetCategory } from "@/modules/zakah/types";
 import { formatAmount, isCurrencyCode } from "@/lib/formatting";
 import { CalculationSteps } from "@/components/shared/calculation-steps";
 import { CurrencyCombobox } from "@/components/currency/currency-combobox";
@@ -24,6 +25,16 @@ import { LiveMetalPrices } from "@/components/prices/live-metal-prices";
 import type { AppliedMetalPrices } from "@/modules/prices/types";
 import { useLocale } from "@/components/layout/locale-provider";
 import { ZakahChart } from "./zakah-chart";
+
+const MONEY_CATEGORIES = [
+  "CASH_HOME",
+  "CASH_BANK",
+  "SAVINGS",
+  "CURRENT_ACCOUNT",
+  "FOREIGN_CURRENCY",
+  "DIGITAL_MONEY",
+  "BUSINESS_CASH",
+] as const;
 
 const ASSET_CATEGORIES = [
   "CASH_HOME",
@@ -43,10 +54,39 @@ const ASSET_CATEGORIES = [
   "BUSINESS_INVENTORY",
   "BUSINESS_RECEIVABLE",
   "BUSINESS_CASH",
+  "LIVESTOCK_CAMEL",
+  "LIVESTOCK_CATTLE",
+  "LIVESTOCK_GOAT_SHEEP",
+  "CROP_WHEAT",
+  "CROP_BARLEY",
+  "CROP_DATES",
+  "CROP_GRAPES",
+  "CROP_OTHER",
+  "MINERALS_TREASURE",
   "SHARES_STOCKS",
   "OTHER_INVESTMENT",
   "OTHER_ASSET",
 ] as const;
+
+const IN_KIND_CATEGORIES: ZakahAssetCategory[] = [
+  "LIVESTOCK_CAMEL",
+  "LIVESTOCK_CATTLE",
+  "LIVESTOCK_GOAT_SHEEP",
+  "CROP_WHEAT",
+  "CROP_BARLEY",
+  "CROP_DATES",
+  "CROP_GRAPES",
+  "CROP_OTHER",
+  "MINERALS_TREASURE",
+];
+
+const CROP_CATEGORIES: ZakahAssetCategory[] = [
+  "CROP_WHEAT",
+  "CROP_BARLEY",
+  "CROP_DATES",
+  "CROP_GRAPES",
+  "CROP_OTHER",
+];
 
 const LIABILITY_TYPES = [
   "IMMEDIATE_DEBT",
@@ -130,10 +170,20 @@ export function ZakahCalculator() {
     if (nisabRaw) {
       window.localStorage.removeItem("mizan:apply-nisab");
       try {
-        const applied = JSON.parse(nisabRaw) as Partial<AppliedMetalPrices> & { currency?: string };
-        if (typeof applied.gold === "number") setValue("nisab.goldPricePerGram", applied.gold);
-        if (typeof applied.silver === "number") setValue("nisab.silverPricePerGram", applied.silver);
-        if (applied.source) setValue("nisab.priceSource", applied.source);
+        const applied = JSON.parse(nisabRaw) as Partial<AppliedMetalPrices> & {
+          currency?: string;
+          goldPricePerGram?: number;
+          silverPricePerGram?: number;
+          priceSource?: string;
+        };
+        // Accept both the current AppliedMetalPrices handoff and the legacy
+        // flattened shape, so a saved Nisab workspace is never silently lost.
+        const gold = applied.gold ?? applied.goldPricePerGram;
+        const silver = applied.silver ?? applied.silverPricePerGram;
+        const source = applied.source ?? applied.priceSource;
+        if (typeof gold === "number") setValue("nisab.goldPricePerGram", gold);
+        if (typeof silver === "number") setValue("nisab.silverPricePerGram", silver);
+        if (source) setValue("nisab.priceSource", source);
         if (applied.recordedAt) setValue("nisab.recordedAt", applied.recordedAt);
         if (applied.currency && isCurrencyCode(applied.currency)) setValue("currency", applied.currency);
         setValue("nisab.isManual", false);
@@ -144,15 +194,18 @@ export function ZakahCalculator() {
     }
   }, [reset, setValue, t]);
 
-  const applyLivePrices = (prices: AppliedMetalPrices) => {
-    setValue("nisab.goldPricePerGram", prices.gold);
-    setValue("nisab.silverPricePerGram", prices.silver);
-    setValue("nisab.priceSource", prices.source);
-    setValue("nisab.recordedAt", prices.recordedAt);
-    setValue("nisab.currency", currency);
-    setValue("nisab.isManual", false);
-    toast.success(t("zakah.toast.liveApplied"));
-  };
+  const applyLivePrices = useCallback(
+    (prices: AppliedMetalPrices) => {
+      setValue("nisab.goldPricePerGram", prices.gold);
+      setValue("nisab.silverPricePerGram", prices.silver);
+      setValue("nisab.priceSource", prices.source);
+      setValue("nisab.recordedAt", prices.recordedAt);
+      setValue("nisab.currency", currency);
+      setValue("nisab.isManual", false);
+      toast.success(t("zakah.toast.liveApplied"));
+    },
+    [currency, setValue, t],
+  );
 
   const changeCurrency = (value: string) => {
     setValue("currency", value);
@@ -246,10 +299,17 @@ export function ZakahCalculator() {
     }
   };
 
+  const primaryCategory = watch("assets.0.category") as ZakahAssetCategory | undefined;
+  const primaryOptions: readonly string[] =
+    primaryCategory && !MONEY_CATEGORIES.includes(primaryCategory as (typeof MONEY_CATEGORIES)[number])
+      ? [primaryCategory, ...MONEY_CATEGORIES]
+      : MONEY_CATEGORIES;
+
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <LiveMetalPrices currency={currency} onApply={applyLivePrices} />
+        <LiveMetalPrices currency={currency} onApply={applyLivePrices} autoApply />
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("zakah.nisabTitle")}</CardTitle>
@@ -356,21 +416,73 @@ export function ZakahCalculator() {
           </CardContent>
         </Card>
 
+        <Card className="border-emerald-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Wallet className="size-4 text-emerald-700" /> {t("zakah.moneyTitle")}
+            </CardTitle>
+            <CardDescription>{t("zakah.moneyDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {assets.fields[0] && (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+                <Label htmlFor="zakah-primary-money" className="text-sm font-semibold">
+                  {t("zakah.moneyQuestion")}
+                </Label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="zakah-primary-money"
+                    type="number"
+                    step="0.01"
+                    className="text-lg font-semibold"
+                    {...register("assets.0.amount", { valueAsNumber: true })}
+                  />
+                  <Select
+                    value={primaryCategory ?? "CASH_HOME"}
+                    onValueChange={(v) => setValue("assets.0.category", v as ZakahRequest["assets"][number]["category"])}
+                  >
+                    <SelectTrigger className="sm:w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {primaryOptions.map((value) => (
+                        <SelectItem key={value} value={value}>{t(`zakah.asset.${value}`)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{t("zakah.moneyHint", { code: currency })}</p>
+              </div>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => assets.append({ id: crypto.randomUUID(), category: "CASH_BANK", amount: 0, currency, conversionRateToBase: 1 })}
+            >
+              <Plus className="size-4" /> {t("zakah.addBank")}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base">{t("zakah.assetsTitle")}</CardTitle>
               <CardDescription>{t("zakah.assetsDesc")}</CardDescription>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => assets.append({ id: crypto.randomUUID(), category: "CASH_BANK", amount: 0, currency, conversionRateToBase: 1 })}>
+            <Button type="button" size="sm" variant="outline" onClick={() => assets.append({ id: crypto.randomUUID(), category: "GOLD_JEWELRY", amount: 0, currency, conversionRateToBase: 1 })}>
               <Plus className="size-4" /> {t("zakah.addAsset")}
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {assets.fields.map((field, index) => {
+            {assets.fields.length === 1 && <p className="text-sm text-muted-foreground">{t("zakah.noExtraAssets")}</p>}
+            {assets.fields.slice(1).map((field, offset) => {
+              const index = offset + 1;
               // eslint-disable-next-line react-hooks/incompatible-library -- RHF's watch() is required for reactive field arrays.
-              const category = watch(`assets.${index}.category`);
+              const category = watch(`assets.${index}.category`) as ZakahAssetCategory;
               const isMetal = category.startsWith("GOLD") || category.startsWith("SILVER");
+              const isInKind = IN_KIND_CATEGORIES.includes(category);
+              const isCrop = CROP_CATEGORIES.includes(category);
+              const unit = isCrop ? "kg" : "head";
               return (
                 <div key={field.id} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-12">
                   <div className="sm:col-span-4">
@@ -399,6 +511,36 @@ export function ZakahCalculator() {
                         <Input type="number" step="0.01" min="0" max="1" {...register(`assets.${index}.purity`, { valueAsNumber: true })} />
                       </div>
                     </>
+                  ) : isInKind ? (
+                    <>
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs">{t("zakah.quantity", { unit })}</Label>
+                        <Input type="number" step="0.01" {...register(`assets.${index}.quantity`, { valueAsNumber: true })} />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <Label className="text-xs">{t("zakah.unitValue", { code: currency })}</Label>
+                        <Input type="number" step="0.01" {...register(`assets.${index}.unitValue`, { valueAsNumber: true })} />
+                      </div>
+                      {isCrop && (
+                        <div className="sm:col-span-3">
+                          <Label className="text-xs">{t("zakah.irrigation")}</Label>
+                          <Select
+                            value={watch(`assets.${index}.irrigation`) ?? "RAIN_FED"}
+                            onValueChange={(v) => setValue(`assets.${index}.irrigation`, v as ZakahRequest["assets"][number]["irrigation"])}
+                          >
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="RAIN_FED">{t("zakah.irrigation.RAIN_FED")}</SelectItem>
+                              <SelectItem value="IRRIGATED">{t("zakah.irrigation.IRRIGATED")}</SelectItem>
+                              <SelectItem value="MIXED">{t("zakah.irrigation.MIXED")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground sm:col-span-12">
+                        {t(`zakah.ruleHint.${category}`)}
+                      </p>
+                    </>
                   ) : (
                     <div className="sm:col-span-4">
                       <Label className="text-xs">{t("zakah.value", { code: currency })}</Label>
@@ -413,6 +555,14 @@ export function ZakahCalculator() {
                 </div>
               );
             })}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => assets.append({ id: crypto.randomUUID(), category: "LIVESTOCK_GOAT_SHEEP", quantity: 0, currency, conversionRateToBase: 1 })}
+            >
+              <Sprout className="size-4" /> {t("zakah.addLivestock")}
+            </Button>
           </CardContent>
         </Card>
 
@@ -456,6 +606,41 @@ export function ZakahCalculator() {
                 </div>
               </div>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("zakah.recipientsTitle")}</CardTitle>
+            <CardDescription>{t("zakah.recipientsDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {ZAKAH_RECIPIENT_PURPOSES.map((purpose) => (
+              <div
+                key={purpose.id}
+                className="rounded-lg border p-3"
+                title={`${t("zakah.recipient.source")} — ${purpose.evidence.map((item) => item.label).join(", ")}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-sm">{t(`zakah.recipient.${purpose.id}`)}</p>
+                    <p dir="rtl" className="font-heading text-sm text-emerald-800">{purpose.arabic}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">{t("zakah.needsReview")}</Badge>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {t(`zakah.recipient.${purpose.id}.desc`)}
+                </p>
+              </div>
+            ))}
+            <a
+              href={EVIDENCE.QURAN_ZAKAH_RECIPIENTS.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-emerald-700 hover:underline sm:col-span-2"
+            >
+              {t("zakah.recipient.source")}
+            </a>
           </CardContent>
         </Card>
 
@@ -521,7 +706,8 @@ function ZakahResultView({
           <CardTitle className="text-base">{t("zakah.payable")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-3xl font-bold text-emerald-900">{formatAmount(result.zakahPayable, result.currency, locale)}</p>
+          <p className="text-3xl font-bold text-emerald-900">{formatAmount(result.totalPayable, result.currency, locale)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("zakah.totalPayable")}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Badge variant={result.nisabReached ? "default" : "secondary"}>{result.nisabReached ? t("zakah.nisabReached") : t("zakah.nisabNotReached")}</Badge>
             <Badge variant={result.hawlCompleted ? "default" : "secondary"}>{result.hawlCompleted ? t("zakah.hawlComplete") : t("zakah.hawlIncomplete")}</Badge>
@@ -542,10 +728,37 @@ function ZakahResultView({
           <Row label={t("zakah.netWealth")} value={formatAmount(result.netZakahableWealth, result.currency, locale)} />
           <Row label={t("zakah.nisabValue")} value={formatAmount(result.nisabValue, result.currency, locale)} />
           <Row label={t("zakah.rate")} value="2.5%" />
+          <Row label={t("zakah.payable")} value={formatAmount(result.zakahPayable, result.currency, locale)} />
+          <Row label={t("zakah.inKindValue")} value={formatAmount(result.totalInKindValue, result.currency, locale)} />
         </CardContent>
       </Card>
 
       {included.length > 0 && <ZakahChart assets={included} currency={result.currency} />}
+
+      {result.inKindDues.length > 0 && (
+        <Card className="border-amber-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("zakah.inKindDues")}</CardTitle>
+            <CardDescription className="text-xs">{t("zakah.inKindCaveat")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {result.inKindDues.map((due: InKindDue) => (
+              <div key={due.id} className="rounded-lg border p-3 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold">{due.label}</p>
+                  <Badge variant="outline" className="text-[10px]">{t("zakah.needsReview")}</Badge>
+                </div>
+                <p className="mt-1">{t("zakah.quantityCol")}: {due.quantity} {due.unit} · {t("zakah.due")}: <span className="font-semibold">{due.dueDescription}</span></p>
+                <p className="mt-1 text-muted-foreground">{due.explanation}</p>
+                <p className="mt-1 text-muted-foreground">{due.ruleId} · {due.verification}</p>
+                {due.estimatedValue !== null && (
+                  <p className="mt-1 font-medium">{formatAmount(due.estimatedValue, result.currency, locale)}</p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">{t("zakah.assetClassification")}</CardTitle></CardHeader>
@@ -558,12 +771,46 @@ function ZakahResultView({
               {result.classifiedAssets.map((asset) => (
                 <TableRow key={asset.id}>
                   <TableCell className="text-xs">{asset.label || t(`zakah.asset.${asset.category}`)}</TableCell>
-                  <TableCell className="text-xs">{formatAmount(asset.valueInBase, result.currency, locale)}</TableCell>
+                  <TableCell className="text-xs">
+                    {asset.valuationMode === "IN_KIND"
+                      ? t("zakah.assetInKind")
+                      : formatAmount(asset.valueInBase, result.currency, locale)}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant={asset.included ? "default" : "secondary"}>{asset.included ? t("zakah.included") : t("zakah.excluded")}</Badge>
+                    <Badge variant={asset.included ? "default" : "secondary"}>
+                      {asset.included ? t("zakah.included") : asset.valuationMode === "IN_KIND" ? t("zakah.inKindDues") : t("zakah.excluded")}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">{t("zakah.liabilityClassification")}</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow><TableHead>{t("zakah.type")}</TableHead><TableHead>{t("zakah.valueCol")}</TableHead><TableHead>{t("zakah.status")}</TableHead></TableRow>
+            </TableHeader>
+            <TableBody>
+              {result.classifiedLiabilities.length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-xs text-muted-foreground">{t("zakah.noLiabilities")}</TableCell></TableRow>
+              ) : (
+                result.classifiedLiabilities.map((liability) => (
+                  <TableRow key={liability.id}>
+                    <TableCell className="text-xs">{liability.label || t(`zakah.liability.${liability.type}`)}</TableCell>
+                    <TableCell className="text-xs">{formatAmount(liability.valueInBase, result.currency, locale)}</TableCell>
+                    <TableCell>
+                      <Badge variant={liability.deductible ? "default" : "secondary"}>
+                        {liability.deductible ? t("zakah.included") : t("zakah.excluded")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
