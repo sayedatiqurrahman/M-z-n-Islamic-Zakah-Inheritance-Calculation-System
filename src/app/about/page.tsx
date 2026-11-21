@@ -87,8 +87,7 @@ export default function AboutPage() {
             <div className="min-w-0 space-y-2">
               <div>
                 <p className="text-lg font-semibold text-emerald-950">Prof. Dr. B. M. Mofizur Rahman</p>
-                <p className="text-sm text-slate-700">Professor</p>
-                <p className="text-sm text-muted-foreground">Department of Qur&apos;anic Sciences and Islamic Studies</p>
+                <p className="text-sm text-slate-700">Professor, Department of Qur&apos;anic Sciences and Islamic Studies</p>
                 <p className="text-sm text-muted-foreground">International Islamic University Chittagong</p>
               </div>
               <div className="space-y-1">
