@@ -8,6 +8,7 @@ import {
   Landmark,
   Library,
   History,
+  UserRound,
   Info,
   Settings,
   type LucideIcon,
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/guide/principles", labelKey: "nav.fiqh", icon: Landmark },
   { href: "/references", labelKey: "nav.references", icon: Library },
   { href: "/history", labelKey: "nav.history", icon: History },
+  { href: "/account", labelKey: "nav.account", icon: UserRound },
   { href: "/about", labelKey: "nav.about", icon: Info },
   { href: "/settings", labelKey: "nav.settings", icon: Settings },
 ];

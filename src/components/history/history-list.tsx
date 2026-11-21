@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatDateTime } from "@/lib/formatting";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ export function HistoryList() {
   const [detail, setDetail] = useState<HistoryDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"all" | "zakah" | "inheritance">("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -195,10 +197,26 @@ export function HistoryList() {
     );
   }
 
+  const filteredItems = tab === "all" ? items : items.filter((i) => i.type === tab);
+
   return (
     <>
-      <div className="space-y-3">
-        {items.map((item) => (
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "all" | "zakah" | "inheritance")} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="all">{t("history.all")}</TabsTrigger>
+          <TabsTrigger value="zakah">{t("history.zakah")}</TabsTrigger>
+          <TabsTrigger value="inheritance">{t("history.inheritance")}</TabsTrigger>
+        </TabsList>
+
+        {filteredItems.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              {t("history.noSaved")}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {filteredItems.map((item) => (
           <Card key={`${item.type}-${item.id}`} className="border-emerald-100">
             <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0 space-y-1">
@@ -239,7 +257,9 @@ export function HistoryList() {
             </CardContent>
           </Card>
         ))}
-      </div>
+          </div>
+        )}
+      </Tabs>
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl" closeLabel={t("common.close")}>

@@ -86,7 +86,7 @@ function serializeSteps(
 // Save
 // ---------------------------------------------------------------------------
 
-export async function saveZakahCalculation(anonymousId: string, raw: unknown): Promise<HistorySummary> {
+export async function saveZakahCalculation(anonymousId: string, raw: unknown, userId?: string | null): Promise<HistorySummary> {
   const input = zakahRequestSchema.parse(raw) as ZakahRequest;
   const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion, "ZAKAH");
   const result = calculateZakah(input);
@@ -96,6 +96,7 @@ export async function saveZakahCalculation(anonymousId: string, raw: unknown): P
     const created = await prisma.zakahCalculation.create({
       data: {
         anonymousId,
+        userId: userId ?? null,
         title: `Zakah · ${input.hawl.assessmentDate}`,
         madhhabId: madhhab.id,
         versionId: methodology.id,
@@ -142,6 +143,7 @@ export async function saveZakahCalculation(anonymousId: string, raw: unknown): P
   const created = await prisma.zakahCalculation.create({
     data: {
       anonymousId,
+      userId: userId ?? null,
       title: `Zakah · ${input.hawl.assessmentDate}`,
       madhhabId: madhhab.id,
       versionId: methodology.id,
@@ -234,6 +236,7 @@ export async function saveZakahCalculation(anonymousId: string, raw: unknown): P
 export async function saveInheritanceCalculation(
   anonymousId: string,
   raw: unknown,
+  userId?: string | null,
 ): Promise<HistorySummary> {
   const input = inheritanceRequestSchema.parse(raw) as InheritanceRequest;
   const { madhhab, methodology } = await resolveMethodology(input.methodologyVersion, "INHERITANCE");
@@ -244,6 +247,7 @@ export async function saveInheritanceCalculation(
     const created = await prisma.inheritanceCase.create({
       data: {
         anonymousId,
+        userId: userId ?? null,
         title: input.deceasedName ? `Inheritance · ${input.deceasedName}` : "Inheritance case",
         madhhabId: madhhab.id,
         versionId: methodology.id,
@@ -301,6 +305,7 @@ export async function saveInheritanceCalculation(
   const created = await prisma.inheritanceCase.create({
     data: {
       anonymousId,
+      userId: userId ?? null,
       title: input.deceasedName ? `Inheritance · ${input.deceasedName}` : "Inheritance case",
       madhhabId: madhhab.id,
       versionId: methodology.id,
@@ -406,16 +411,21 @@ export async function saveInheritanceCalculation(
 // Read
 // ---------------------------------------------------------------------------
 
-export async function listHistory(anonymousId: string): Promise<HistorySummary[]> {
+function ownerWhere(anonymousId: string, userId?: string | null) {
+  return userId ? { OR: [{ userId }, { anonymousId }] } : { anonymousId };
+}
+
+export async function listHistory(anonymousId: string, userId?: string | null): Promise<HistorySummary[]> {
+  const where = ownerWhere(anonymousId, userId);
   const [zakah, inheritance] = await Promise.all([
     prisma.zakahCalculation.findMany({
-      where: { anonymousId },
+      where,
       orderBy: { createdAt: "desc" },
       take: 50,
       include: { result: true },
     }),
     prisma.inheritanceCase.findMany({
-      where: { anonymousId },
+      where,
       orderBy: { createdAt: "desc" },
       take: 50,
       include: { result: true, heirs: true },
@@ -456,10 +466,12 @@ export async function getHistoryDetail(
   anonymousId: string,
   type: HistoryType,
   id: string,
+  userId?: string | null,
 ): Promise<HistoryDetail | null> {
+  const where = { id, ...ownerWhere(anonymousId, userId) };
   if (type === "zakah") {
     const item = await prisma.zakahCalculation.findFirst({
-      where: { id, anonymousId },
+      where,
       include: { steps: { orderBy: { step: "asc" } } },
     });
     if (!item) return null;
@@ -477,7 +489,7 @@ export async function getHistoryDetail(
   }
 
   const item = await prisma.inheritanceCase.findFirst({
-    where: { id, anonymousId },
+    where,
     include: { steps: { orderBy: { step: "asc" } } },
   });
   if (!item) return null;
@@ -498,20 +510,23 @@ export async function deleteHistoryItem(
   anonymousId: string,
   type: HistoryType,
   id: string,
+  userId?: string | null,
 ): Promise<boolean> {
+  const where = { id, ...ownerWhere(anonymousId, userId) };
   if (type === "zakah") {
-    const result = await prisma.zakahCalculation.deleteMany({ where: { id, anonymousId } });
+    const result = await prisma.zakahCalculation.deleteMany({ where });
     return result.count > 0;
   }
-  const result = await prisma.inheritanceCase.deleteMany({ where: { id, anonymousId } });
+  const result = await prisma.inheritanceCase.deleteMany({ where });
   return result.count > 0;
 }
 
-export async function historyCounts(anonymousId: string | null) {
-  if (!anonymousId) return { zakah: 0, inheritance: 0 };
+export async function historyCounts(anonymousId: string | null, userId?: string | null) {
+  if (!anonymousId && !userId) return { zakah: 0, inheritance: 0 };
+  const where = userId ? { OR: [{ userId }, ...(anonymousId ? [{ anonymousId }] : [])] } : { anonymousId: anonymousId! };
   const [zakah, inheritance] = await Promise.all([
-    prisma.zakahCalculation.count({ where: { anonymousId } }),
-    prisma.inheritanceCase.count({ where: { anonymousId } }),
+    prisma.zakahCalculation.count({ where }),
+    prisma.inheritanceCase.count({ where }),
   ]);
   return { zakah, inheritance };
 }

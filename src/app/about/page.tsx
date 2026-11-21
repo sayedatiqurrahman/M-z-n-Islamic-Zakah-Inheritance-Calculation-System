@@ -1,6 +1,6 @@
 "use client";
 
-import { GraduationCap, IdCard, Landmark, School, UserRound, Users } from "lucide-react";
+import { GraduationCap, IdCard, Landmark, Mail, School, UserRound, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { AcademicDisclaimer } from "@/components/shared/academic-disclaimer";
@@ -70,6 +70,40 @@ export default function AboutPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-emerald-100">
+        <CardHeader>
+          <CardTitle className="text-base">{t("about.scholars.title")}</CardTitle>
+          <p className="text-sm text-muted-foreground">{t("about.scholars.description")}</p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4 rounded-xl border border-emerald-100 bg-emerald-50/30 p-4 sm:flex-row sm:items-start">
+            <img
+              src="https://portal.iiuc.ac.bd/assets/teacher/2086.jpeg"
+              alt="Prof. Dr. B. M. Mofizur Rahman"
+              className="size-24 rounded-xl object-cover border border-emerald-100"
+              loading="lazy"
+            />
+            <div className="min-w-0 space-y-2">
+              <div>
+                <p className="text-lg font-semibold text-emerald-950">Prof. Dr. B. M. Mofizur Rahman</p>
+                <p className="text-sm text-slate-700">Professor</p>
+                <p className="text-sm text-muted-foreground">Department of Qur&apos;anic Sciences and Islamic Studies</p>
+                <p className="text-sm text-muted-foreground">International Islamic University Chittagong</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t("about.scholars.contact")}</p>
+                <a href="mailto:bmmofiz@yahoo.com" className="flex items-center gap-2 text-sm text-emerald-700 hover:underline">
+                  <Mail className="size-4" /> bmmofiz@yahoo.com
+                </a>
+                <a href="mailto:drbmmofizurrahmanalazhari@gmail.com" className="flex items-center gap-2 text-sm text-emerald-700 hover:underline">
+                  <Mail className="size-4" /> drbmmofizurrahmanalazhari@gmail.com
+                </a>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="border-emerald-100">
         <CardHeader>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getOrCreateAnonymousId } from "@/lib/anonymous-session";
+import { getSessionUserId } from "@/lib/auth";
 import {
   deleteHistoryItem,
   getHistoryDetail,
@@ -21,17 +22,18 @@ const saveSchema = z.object({
 export async function GET(request: Request) {
   try {
     const anonymousId = await getOrCreateAnonymousId();
+    const userId = await getSessionUserId();
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
     const type = url.searchParams.get("type");
 
     if (id && (type === "zakah" || type === "inheritance")) {
-      const detail = await getHistoryDetail(anonymousId, type, id);
+      const detail = await getHistoryDetail(anonymousId, type, id, userId);
       if (!detail) return NextResponse.json({ error: "Not found." }, { status: 404 });
       return NextResponse.json(detail);
     }
 
-    const items = await listHistory(anonymousId);
+    const items = await listHistory(anonymousId, userId);
     return NextResponse.json({ items });
   } catch (error) {
     if (process.env.NODE_ENV !== "production") console.error("[history:get]", error);
@@ -47,10 +49,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid input." }, { status: 400 });
     }
     const anonymousId = await getOrCreateAnonymousId();
+    const userId = await getSessionUserId();
     const summary =
       parsed.data.type === "zakah"
-        ? await saveZakahCalculation(anonymousId, parsed.data.input)
-        : await saveInheritanceCalculation(anonymousId, parsed.data.input);
+        ? await saveZakahCalculation(anonymousId, parsed.data.input, userId)
+        : await saveInheritanceCalculation(anonymousId, parsed.data.input, userId);
     return NextResponse.json(summary, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -73,7 +76,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Invalid request." }, { status: 400 });
     }
     const anonymousId = await getOrCreateAnonymousId();
-    const removed = await deleteHistoryItem(anonymousId, type, id);
+    const userId = await getSessionUserId();
+    const removed = await deleteHistoryItem(anonymousId, type, id, userId);
     if (!removed) return NextResponse.json({ error: "Not found." }, { status: 404 });
     return NextResponse.json({ deleted: true });
   } catch {
