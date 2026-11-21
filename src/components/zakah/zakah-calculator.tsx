@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useForm, useFieldArray, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2, Calculator, CircleAlert, Loader2, Save, Download, Wallet, Sprout } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { zakahRequestSchema, type ZakahRequest } from "@/modules/zakah/schemas";
 import { ZAKAH_METHODOLOGY_VERSION, ZAKAH_RECIPIENT_PURPOSES } from "@/modules/zakah/rules";
 import { EVIDENCE } from "@/modules/fiqh/evidences/catalog";
@@ -25,6 +26,7 @@ import { LiveMetalPrices } from "@/components/prices/live-metal-prices";
 import type { AppliedMetalPrices } from "@/modules/prices/types";
 import { useLocale } from "@/components/layout/locale-provider";
 import { ZakahChart } from "./zakah-chart";
+import { buildLocalZakahDetail, loadDraft, saveDraft, upsertLocalHistory } from "@/lib/local-history";
 
 const MONEY_CATEGORIES = [
   "CASH_HOME",
@@ -135,12 +137,44 @@ export function ZakahCalculator() {
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  const form = useForm<ZakahRequest>({ resolver: zodResolver(zakahRequestSchema), defaultValues });
+  const form = useForm<ZakahRequest>({
+    resolver: zodResolver(zakahRequestSchema) as never,
+    defaultValues,
+    shouldFocusError: true,
+  });
   const { control, register, handleSubmit, watch, setValue, reset, formState } = form;
+  const { errors } = formState;
+
+  const validationMessages = useMemo(() => {
+    const messages: string[] = [];
+    const push = (msg: string) => {
+      if (msg && !messages.includes(msg)) messages.push(msg);
+    };
+
+    const walk = (err: unknown, path: string[]) => {
+      if (!err || typeof err !== "object") return;
+      const e = err as Record<string, unknown>;
+      if (typeof e.message === "string" && e.message) {
+        // Build a friendly label from path
+        const label = formatFieldPath(path, t);
+        push(label ? `${label}: ${e.message}` : e.message);
+      }
+      for (const [key, value] of Object.entries(e)) {
+        if (key === "message" || key === "type" || key === "ref" || key === "types") continue;
+        if (value && typeof value === "object") {
+          walk(value, [...path, key]);
+        }
+      }
+    };
+
+    walk(errors as FieldErrors<ZakahRequest>, []);
+    return messages.slice(0, 8);
+  }, [errors, t]);
   const assets = useFieldArray({ control, name: "assets" });
   const liabilities = useFieldArray({ control, name: "liabilities" });
   const currency = watch("currency");
   const isManual = watch("nisab.isManual");
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const storedCurrency = window.localStorage.getItem("mizan-currency");
@@ -166,6 +200,7 @@ export function ZakahCalculator() {
       }
     }
 
+    let appliedNisab = false;
     const nisabRaw = window.localStorage.getItem("mizan:apply-nisab");
     if (nisabRaw) {
       window.localStorage.removeItem("mizan:apply-nisab");
@@ -187,12 +222,40 @@ export function ZakahCalculator() {
         if (applied.recordedAt) setValue("nisab.recordedAt", applied.recordedAt);
         if (applied.currency && isCurrencyCode(applied.currency)) setValue("currency", applied.currency);
         setValue("nisab.isManual", false);
+        appliedNisab = true;
         toast.success(t("zakah.toast.nisabApplied"));
       } catch {
         // Ignore malformed local data.
       }
     }
+
+    if (!appliedNisab) {
+      const draft = loadDraft<unknown>("zakah");
+      if (draft) {
+        const parsed = zakahRequestSchema.safeParse(draft);
+        if (parsed.success) {
+          reset(parsed.data);
+        }
+      }
+    }
   }, [reset, setValue, t]);
+
+  useEffect(() => {
+    const subscription = watch((values) => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      draftTimer.current = setTimeout(() => {
+        try {
+          saveDraft("zakah", values);
+        } catch {
+          // ignore
+        }
+      }, 400);
+    });
+    return () => {
+      subscription.unsubscribe();
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+  }, [watch]);
 
   const applyLivePrices = useCallback(
     (prices: AppliedMetalPrices) => {
@@ -252,15 +315,26 @@ export function ZakahCalculator() {
     if (!lastInput) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "zakah", input: lastInput }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        toast.error(payload.error ?? t("zakah.unableSave"));
-        return;
+      // Always persist locally so history works on localhost/offline.
+      try {
+        const localDetail = buildLocalZakahDetail(lastInput);
+        upsertLocalHistory(localDetail);
+      } catch {
+        // ignore local build errors
+      }
+
+      try {
+        const response = await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "zakah", input: lastInput }),
+        });
+        // If server fails we still keep local save; treat as saved.
+        if (!response.ok) {
+          // non-fatal for local persistence
+        }
+      } catch {
+        // server unavailable; local save already done
       }
       toast.success(t("zakah.saved"));
     } catch {
@@ -426,35 +500,45 @@ export function ZakahCalculator() {
             <CardDescription>{t("zakah.moneyDesc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {assets.fields[0] && (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
-                <Label htmlFor="zakah-primary-money" className="text-sm font-semibold">
-                  {t("zakah.moneyQuestion")}
-                </Label>
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    id="zakah-primary-money"
-                    type="number"
-                    step="any"
-                    min="0"
-                    className="text-lg font-semibold"
-                    {...register("assets.0.amount", { valueAsNumber: true })}
-                  />
-                  <Select
-                    value={primaryCategory ?? "CASH_HOME"}
-                    onValueChange={(v) => setValue("assets.0.category", v as ZakahRequest["assets"][number]["category"])}
-                  >
-                    <SelectTrigger className="sm:w-56"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {primaryOptions.map((value) => (
-                        <SelectItem key={value} value={value}>{t(`zakah.asset.${value}`)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {assets.fields[0] && (() => {
+              const rowErr = (errors.assets as unknown as Array<Record<string, { message?: string }>> | undefined)?.[0];
+              const amountErr = rowErr?.amount?.message;
+              const categoryErr = rowErr?.category?.message;
+              const rowMsg = amountErr || categoryErr || (rowErr as { message?: string } | undefined)?.message;
+              return (
+                <div className={cn("rounded-lg border border-emerald-100 bg-emerald-50/40 p-4", rowErr && "border-destructive/50 bg-destructive/5")}>
+                  <Label htmlFor="zakah-primary-money" className="text-sm font-semibold">
+                    {t("zakah.moneyQuestion")}
+                  </Label>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <div className="flex-1">
+                      <Input
+                        id="zakah-primary-money"
+                        type="number"
+                        step="any"
+                        min="0"
+                        aria-invalid={Boolean(amountErr)}
+                        className={cn("text-lg font-semibold", amountErr && "border-destructive focus-visible:ring-destructive")}
+                        {...register("assets.0.amount", { valueAsNumber: true })}
+                      />
+                    </div>
+                    <Select
+                      value={primaryCategory ?? "CASH_HOME"}
+                      onValueChange={(v) => setValue("assets.0.category", v as ZakahRequest["assets"][number]["category"])}
+                    >
+                      <SelectTrigger className={cn("sm:w-56", categoryErr && "border-destructive")}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {primaryOptions.map((value) => (
+                          <SelectItem key={value} value={value}>{t(`zakah.asset.${value}`)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{t("zakah.moneyHint", { code: currency })}</p>
+                  {rowMsg && <p className="mt-2 text-xs font-medium text-destructive">{String(rowMsg)}</p>}
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{t("zakah.moneyHint", { code: currency })}</p>
-              </div>
-            )}
+              );
+            })()}
             <Button
               type="button"
               size="sm"
@@ -480,49 +564,68 @@ export function ZakahCalculator() {
             {assets.fields.length === 1 && <p className="text-sm text-muted-foreground">{t("zakah.noExtraAssets")}</p>}
             {assets.fields.slice(1).map((field, offset) => {
               const index = offset + 1;
-              // eslint-disable-next-line react-hooks/incompatible-library -- RHF's watch() is required for reactive field arrays.
               const category = watch(`assets.${index}.category`) as ZakahAssetCategory;
               const isMetal = category.startsWith("GOLD") || category.startsWith("SILVER");
               const isInKind = IN_KIND_CATEGORIES.includes(category);
               const isCrop = CROP_CATEGORIES.includes(category);
               const unit = isCrop ? "kg" : "head";
+              const rowErr = (errors.assets as unknown as Array<Record<string, { message?: string }>> | undefined)?.[index];
+              const getMsg = (k: string) => rowErr?.[k]?.message as string | undefined;
+              const firstRowMsg =
+                getMsg("category") ||
+                getMsg("label") ||
+                getMsg("amount") ||
+                getMsg("weightGrams") ||
+                getMsg("purity") ||
+                getMsg("quantity") ||
+                getMsg("unitValue") ||
+                getMsg("irrigation") ||
+                getMsg("currency") ||
+                getMsg("conversionRateToBase") ||
+                (rowErr as { message?: string } | undefined)?.message;
               return (
-                <div key={field.id} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-12">
+                <div key={field.id} className={cn("grid gap-3 rounded-lg border p-3 sm:grid-cols-12", rowErr && "border-destructive/50 bg-destructive/5")}>
                   <div className="sm:col-span-4">
                     <Label className="text-xs">{t("zakah.category")}</Label>
                     <Select value={category} onValueChange={(v) => setValue(`assets.${index}.category`, v as ZakahRequest["assets"][number]["category"])}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={cn(getMsg("category") && "border-destructive")}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {ASSET_CATEGORIES.map((value) => (
                           <SelectItem key={value} value={value}>{t(`zakah.asset.${value}`)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {getMsg("category") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("category"))}</p>}
                   </div>
                   <div className="sm:col-span-3">
                     <Label className="text-xs">{t("zakah.label")}</Label>
-                    <Input placeholder={t("common.optional")} {...register(`assets.${index}.label`)} />
+                    <Input placeholder={t("common.optional")} {...register(`assets.${index}.label`)} className={cn(getMsg("label") && "border-destructive")} />
+                    {getMsg("label") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("label"))}</p>}
                   </div>
                   {isMetal ? (
                     <>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.weight")}</Label>
-                        <Input type="number" step="any" min="0" {...register(`assets.${index}.weightGrams`, { valueAsNumber: true })} />
+                        <Input aria-invalid={Boolean(getMsg("weightGrams"))} type="number" step="any" min="0" className={cn(getMsg("weightGrams") && "border-destructive")} {...register(`assets.${index}.weightGrams`, { valueAsNumber: true })} />
+                        {getMsg("weightGrams") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("weightGrams"))}</p>}
                       </div>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.purity")}</Label>
-                        <Input type="number" step="any" min="0" max="1" {...register(`assets.${index}.purity`, { valueAsNumber: true })} />
+                        <Input aria-invalid={Boolean(getMsg("purity"))} type="number" step="any" min="0" max="1" className={cn(getMsg("purity") && "border-destructive")} {...register(`assets.${index}.purity`, { valueAsNumber: true })} />
+                        {getMsg("purity") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("purity"))}</p>}
                       </div>
                     </>
                   ) : isInKind ? (
                     <>
                       <div className="sm:col-span-2">
                         <Label className="text-xs">{t("zakah.quantity", { unit })}</Label>
-                        <Input type="number" step="any" min="0" {...register(`assets.${index}.quantity`, { valueAsNumber: true })} />
+                        <Input aria-invalid={Boolean(getMsg("quantity"))} type="number" step="any" min="0" className={cn(getMsg("quantity") && "border-destructive")} {...register(`assets.${index}.quantity`, { valueAsNumber: true })} />
+                        {getMsg("quantity") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("quantity"))}</p>}
                       </div>
                       <div className="sm:col-span-3">
                         <Label className="text-xs">{t("zakah.unitValue", { code: currency })}</Label>
-                        <Input type="number" step="any" min="0" {...register(`assets.${index}.unitValue`, { valueAsNumber: true })} />
+                        <Input aria-invalid={Boolean(getMsg("unitValue"))} type="number" step="any" min="0" className={cn(getMsg("unitValue") && "border-destructive")} {...register(`assets.${index}.unitValue`, { valueAsNumber: true })} />
+                        {getMsg("unitValue") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("unitValue"))}</p>}
                       </div>
                       {isCrop && (
                         <div className="sm:col-span-3">
@@ -531,13 +634,14 @@ export function ZakahCalculator() {
                             value={watch(`assets.${index}.irrigation`) ?? "RAIN_FED"}
                             onValueChange={(v) => setValue(`assets.${index}.irrigation`, v as ZakahRequest["assets"][number]["irrigation"])}
                           >
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectTrigger className={cn(getMsg("irrigation") && "border-destructive")}><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="RAIN_FED">{t("zakah.irrigation.RAIN_FED")}</SelectItem>
                               <SelectItem value="IRRIGATED">{t("zakah.irrigation.IRRIGATED")}</SelectItem>
                               <SelectItem value="MIXED">{t("zakah.irrigation.MIXED")}</SelectItem>
                             </SelectContent>
                           </Select>
+                          {getMsg("irrigation") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("irrigation"))}</p>}
                         </div>
                       )}
                       <p className="text-[11px] text-muted-foreground sm:col-span-12">
@@ -547,7 +651,8 @@ export function ZakahCalculator() {
                   ) : (
                     <div className="sm:col-span-4">
                       <Label className="text-xs">{t("zakah.value", { code: currency })}</Label>
-                      <Input type="number" step="any" min="0" {...register(`assets.${index}.amount`, { valueAsNumber: true })} />
+                      <Input aria-invalid={Boolean(getMsg("amount"))} type="number" step="any" min="0" className={cn(getMsg("amount") && "border-destructive")} {...register(`assets.${index}.amount`, { valueAsNumber: true })} />
+                      {getMsg("amount") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("amount"))}</p>}
                     </div>
                   )}
                   <div className="flex items-end sm:col-span-1">
@@ -555,6 +660,11 @@ export function ZakahCalculator() {
                       <Trash2 className="size-4 text-destructive" />
                     </Button>
                   </div>
+                  {firstRowMsg && (
+                    <p className="sm:col-span-12 text-xs font-medium text-destructive">
+                      {t("zakah.asset")} {index + 1}: {String(firstRowMsg)}
+                    </p>
+                  )}
                 </div>
               );
             })}
@@ -581,44 +691,75 @@ export function ZakahCalculator() {
           </CardHeader>
           <CardContent className="space-y-3">
             {liabilities.fields.length === 0 && <p className="text-sm text-muted-foreground">{t("zakah.noLiabilities")}</p>}
-            {liabilities.fields.map((field, index) => (
-              <div key={field.id} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-12">
-                <div className="sm:col-span-5">
-                  <Label className="text-xs">{t("zakah.type")}</Label>
-                  <Select value={watch(`liabilities.${index}.type`)} onValueChange={(v) => setValue(`liabilities.${index}.type`, v as ZakahRequest["liabilities"][number]["type"])}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {LIABILITY_TYPES.map((value) => (
-                        <SelectItem key={value} value={value}>{t(`zakah.liability.${value}`)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            {liabilities.fields.map((field, index) => {
+              const rowErr = (errors.liabilities as unknown as Array<Record<string, { message?: string }>> | undefined)?.[index];
+              const getMsg = (k: string) => rowErr?.[k]?.message as string | undefined;
+              const firstRowMsg =
+                getMsg("type") ||
+                getMsg("amount") ||
+                getMsg("label") ||
+                getMsg("dueNow") ||
+                getMsg("currency") ||
+                getMsg("conversionRateToBase") ||
+                (rowErr as { message?: string } | undefined)?.message;
+              return (
+                <div key={field.id} className={cn("grid gap-3 rounded-lg border p-3 sm:grid-cols-12", rowErr && "border-destructive/50 bg-destructive/5")}>
+                  <div className="sm:col-span-5">
+                    <Label className="text-xs">{t("zakah.type")}</Label>
+                    <Select value={watch(`liabilities.${index}.type`)} onValueChange={(v) => setValue(`liabilities.${index}.type`, v as ZakahRequest["liabilities"][number]["type"])}>
+                      <SelectTrigger className={cn(getMsg("type") && "border-destructive")}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {LIABILITY_TYPES.map((value) => (
+                          <SelectItem key={value} value={value}>{t(`zakah.liability.${value}`)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {getMsg("type") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("type"))}</p>}
+                  </div>
+                  <div className="sm:col-span-3">
+                    <Label className="text-xs">{t("zakah.amount", { code: currency })}</Label>
+                    <Input aria-invalid={Boolean(getMsg("amount"))} type="number" step="any" min="0" className={cn(getMsg("amount") && "border-destructive")} {...register(`liabilities.${index}.amount`, { valueAsNumber: true })} />
+                    {getMsg("amount") && <p className="mt-1 text-[11px] text-destructive">{String(getMsg("amount"))}</p>}
+                  </div>
+                  <div className="flex items-end gap-2 sm:col-span-4">
+                    <label className="flex items-center gap-2 text-xs">
+                      <Checkbox checked={watch(`liabilities.${index}.dueNow`)} onCheckedChange={(v) => setValue(`liabilities.${index}.dueNow`, Boolean(v))} />
+                      {t("zakah.dueNow")}
+                    </label>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => liabilities.remove(index)} aria-label={t("zakah.removeLiability")}>
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
+                  </div>
+                  {firstRowMsg && (
+                    <p className="sm:col-span-12 text-xs font-medium text-destructive">
+                      {t("zakah.liabilitiesTitle")} {index + 1}: {String(firstRowMsg)}
+                    </p>
+                  )}
                 </div>
-                <div className="sm:col-span-3">
-                  <Label className="text-xs">{t("zakah.amount", { code: currency })}</Label>
-                  <Input type="number" step="any" min="0" {...register(`liabilities.${index}.amount`, { valueAsNumber: true })} />
-                </div>
-                <div className="flex items-end gap-2 sm:col-span-4">
-                  <label className="flex items-center gap-2 text-xs">
-                    <Checkbox checked={watch(`liabilities.${index}.dueNow`)} onCheckedChange={(v) => setValue(`liabilities.${index}.dueNow`, Boolean(v))} />
-                    {t("zakah.dueNow")}
-                  </label>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => liabilities.remove(index)} aria-label={t("zakah.removeLiability")}>
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={pending} className="bg-emerald-700 hover:bg-emerald-800">
-            {pending ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
-            {pending ? t("zakah.calculating") : t("zakah.calculate")}
-          </Button>
-          {Object.keys(formState.errors).length > 0 && (
-            <span className="text-sm text-destructive">{t("zakah.reviewInputs")}</span>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" disabled={pending} className="bg-emerald-700 hover:bg-emerald-800">
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Calculator className="size-4" />}
+              {pending ? t("zakah.calculating") : t("zakah.calculate")}
+            </Button>
+          </div>
+          {validationMessages.length > 0 && (
+            <Alert variant="destructive" className="border-destructive/30 bg-destructive/5">
+              <CircleAlert className="size-4" />
+              <AlertTitle>{t("zakah.reviewInputs")}</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                  {validationMessages.map((msg, i) => (
+                    <li key={`${i}-${msg}`}>{msg}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
         </div>
 
@@ -685,6 +826,79 @@ export function ZakahCalculator() {
       </div>
     </div>
   );
+}
+
+function formatFieldPath(path: string[], t: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (path.length === 0) return "";
+  const [head, ...rest] = path;
+  if (head === "assets" && rest.length > 0) {
+    const idx = Number(rest[0]);
+    const label = Number.isFinite(idx) ? `${t("zakah.asset")} ${idx + 1}` : t("zakah.assetsTitle");
+    const field = rest[1];
+    if (!field) return label;
+    const fieldMap: Record<string, string> = {
+      amount: t("zakah.valueCol"),
+      quantity: t("zakah.quantityCol"),
+      unitValue: t("zakah.unitValue", { code: "" }).replace(/\s*\(\)\s*$/, "").trim() || "Unit value",
+      weightGrams: t("zakah.weight"),
+      purity: t("zakah.purity"),
+      category: t("zakah.category"),
+      label: t("zakah.label"),
+      irrigation: t("zakah.irrigation"),
+      currency: t("zakah.currency"),
+      conversionRateToBase: t("zakah.currency"),
+      marketValue: t("zakah.valueCol"),
+    };
+    return `${label} – ${fieldMap[field] ?? field}`;
+  }
+  if (head === "liabilities" && rest.length > 0) {
+    const idx = Number(rest[0]);
+    const label = Number.isFinite(idx) ? `${t("zakah.liabilitiesTitle")} ${idx + 1}` : t("zakah.liabilitiesTitle");
+    const field = rest[1];
+    const fieldMap: Record<string, string> = {
+      amount: t("zakah.amount", { code: "" }).replace(/\s*\(\)\s*$/, "").trim() || t("zakah.valueCol"),
+      type: t("zakah.type"),
+      label: t("zakah.label"),
+      dueNow: t("zakah.dueNow"),
+      currency: t("zakah.currency"),
+      conversionRateToBase: t("zakah.currency"),
+    };
+    return field ? `${label} – ${fieldMap[field] ?? field}` : label;
+  }
+  if (head === "nisab") {
+    const field = rest[0];
+    const map: Record<string, string> = {
+      method: t("zakah.nisabMethod"),
+      goldNisabGrams: t("zakah.goldWeight"),
+      silverNisabGrams: t("zakah.silverWeight"),
+      goldPricePerGram: t("zakah.goldPrice"),
+      silverPricePerGram: t("zakah.silverPrice"),
+      priceSource: t("zakah.priceSource"),
+      currency: t("zakah.currency"),
+      recordedAt: t("zakah.assessmentDate"),
+      isManual: t("zakah.manualPrices"),
+    };
+    return map[field ?? ""] ?? `${t("zakah.nisabTitle")} – ${field ?? ""}`;
+  }
+  if (head === "hawl") {
+    const field = rest[0];
+    const map: Record<string, string> = {
+      nisabFirstReachedDate: t("zakah.nisabFirst"),
+      assessmentDate: t("zakah.assessmentDate"),
+      previousZakahDate: t("zakah.previousZakah"),
+      calendarMethod: t("zakah.calendarMethod"),
+      wealthRemainedAboveNisab: t("zakah.wealthAbove"),
+    };
+    return map[field ?? ""] ?? `${t("zakah.hawlTitle")} – ${field ?? ""}`;
+  }
+  const top: Record<string, string> = {
+    currency: t("zakah.currency"),
+    ownershipConfirmed: t("zakah.ownership"),
+    growthConditionConfirmed: t("zakah.growth"),
+    madhhab: t("common.madhhab"),
+    methodologyVersion: t("common.methodology"),
+  };
+  return top[head] ?? head;
 }
 
 function ZakahResultView({

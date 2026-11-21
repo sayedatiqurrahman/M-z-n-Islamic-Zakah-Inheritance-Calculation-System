@@ -47,4 +47,3 @@ next-env.d.ts
 # Internal docs and agent instructions (keep local, do not publish)
 /AGENTS.md
 /agent.md
-/docs/*.md

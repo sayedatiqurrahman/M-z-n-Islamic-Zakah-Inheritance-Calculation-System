@@ -13,28 +13,18 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { formatDateTime } from "@/lib/formatting";
 import { toast } from "sonner";
 import { useLocale } from "@/components/layout/locale-provider";
+import {
+  getLocalHistoryDetail,
+  loadLocalHistory,
+  mergeHistory,
+  removeLocalHistory,
+  type LocalHistoryDetail,
+  type LocalHistoryItem,
+} from "@/lib/local-history";
 
-interface HistoryItem {
-  id: string;
-  type: "zakah" | "inheritance";
-  title: string;
-  createdAt: string;
-  currency: string;
-  summary: string;
-  supported: boolean;
-}
+type HistoryItem = LocalHistoryItem;
 
-interface HistoryDetail extends HistoryItem {
-  input: unknown;
-  steps: {
-    step: number;
-    title: string;
-    calculation: string;
-    result: string;
-    fiqhPrinciple: string;
-    reason: string;
-  }[];
-}
+type HistoryDetail = LocalHistoryDetail;
 
 export function HistoryList() {
   const router = useRouter();
@@ -49,13 +39,16 @@ export function HistoryList() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const local = loadLocalHistory();
     try {
       const response = await fetch("/api/history", { cache: "no-store" });
       if (!response.ok) throw new Error("Failed to load history");
       const data = (await response.json()) as { items: HistoryItem[] };
-      setItems(data.items);
+      setItems(mergeHistory(data.items ?? [], local));
     } catch {
-      setError(t("history.unableLoad"));
+      // Fall back to locally saved history (works on localhost without DB/server).
+      setItems(mergeHistory([], local));
+      if (local.length === 0) setError(t("history.unableLoad"));
     } finally {
       setLoading(false);
     }
@@ -66,9 +59,17 @@ export function HistoryList() {
   }, [load]);
 
   const fetchDetail = useCallback(async (item: HistoryItem): Promise<HistoryDetail | null> => {
-    const response = await fetch(`/api/history?type=${item.type}&id=${item.id}`, { cache: "no-store" });
-    if (!response.ok) return null;
-    return (await response.json()) as HistoryDetail;
+    const localDetail = getLocalHistoryDetail(item.type, item.id);
+    if (item.id.startsWith("local-") || item.local) {
+      return localDetail;
+    }
+    try {
+      const response = await fetch(`/api/history?type=${item.type}&id=${item.id}`, { cache: "no-store" });
+      if (response.ok) return (await response.json()) as HistoryDetail;
+    } catch {
+      // ignore
+    }
+    return localDetail;
   }, []);
 
   const view = async (item: HistoryItem) => {
@@ -90,7 +91,7 @@ export function HistoryList() {
     setBusyId(item.id);
     try {
       const data = await fetchDetail(item);
-      if (!data) {
+      if (!data || !data.input) {
         toast.error(t("history.unableLoadCalc"));
         return;
       }
@@ -106,7 +107,7 @@ export function HistoryList() {
     setBusyId(item.id);
     try {
       const data = await fetchDetail(item);
-      if (!data) {
+      if (!data || !data.input) {
         toast.error(t("history.unableLoadCalc"));
         return;
       }
@@ -139,13 +140,19 @@ export function HistoryList() {
     if (!window.confirm(t("history.deleteConfirm"))) return;
     setBusyId(item.id);
     try {
-      const response = await fetch(`/api/history?type=${item.type}&id=${item.id}`, { method: "DELETE" });
-      if (!response.ok) {
-        toast.error(t("common.error"));
-        return;
+      const isLocal = item.id.startsWith("local-") || item.local;
+      if (isLocal) {
+        removeLocalHistory(item.type, item.id);
+      } else {
+        removeLocalHistory(item.type, item.id);
+        try {
+          await fetch(`/api/history?type=${item.type}&id=${item.id}`, { method: "DELETE" });
+        } catch {
+          // local copy removed; server may be unavailable
+        }
       }
       toast.success(t("history.calculationDeleted"));
-      setItems((prev) => prev.filter((entry) => entry.id !== item.id));
+      setItems((prev) => prev.filter((entry) => !(entry.id === item.id && entry.type === item.type)));
     } finally {
       setBusyId(null);
     }

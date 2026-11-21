@@ -25,7 +25,7 @@ export function CalculationSteps({ steps }: { steps: CalculationStepData[] }) {
             </span>
           </AccordionTrigger>
           <AccordionContent className="space-y-3 pt-2 text-sm">
-            <div className="grid gap-2 rounded-lg bg-slate-50 p-3">
+            <div className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-900/40">
               <div><span className="font-semibold">{TEXT.calculation}: </span><code dir="ltr">{step.calculation}</code></div>
               <div><span className="font-semibold">{TEXT.result}: </span>{step.result}</div>
             </div>

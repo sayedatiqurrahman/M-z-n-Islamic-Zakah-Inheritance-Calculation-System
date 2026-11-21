@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useLocale } from "@/components/layout/locale-provider";
 import { CurrencyCombobox } from "@/components/currency/currency-combobox";
 import { LOCALES, type Locale } from "@/lib/i18n";
+import { loadLocalSettings, saveLocalSettings } from "@/lib/local-history";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
@@ -20,11 +21,31 @@ interface Settings {
   nisabMethod: "GOLD" | "SILVER";
 }
 
+const DEFAULT_SETTINGS: Settings = { locale: "en", currency: "BDT", nisabMethod: "SILVER" };
+
+function readStoredSettings(): Settings {
+  const stored = loadLocalSettings();
+  if (stored) {
+    return {
+      locale: (stored.locale as Locale) ?? DEFAULT_SETTINGS.locale,
+      currency: stored.currency || DEFAULT_SETTINGS.currency,
+      nisabMethod: stored.nisabMethod === "GOLD" ? "GOLD" : "SILVER",
+    };
+  }
+  try {
+    const currency = window.localStorage.getItem("mizan-currency") || DEFAULT_SETTINGS.currency;
+    const nisabMethod = window.localStorage.getItem("mizan-nisab-method") === "GOLD" ? "GOLD" : "SILVER";
+    return { ...DEFAULT_SETTINGS, currency, nisabMethod };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
 export function SettingsForm() {
   const { locale, setLocale, t } = useLocale();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const [settings, setSettings] = useState<Settings>({ locale: "en", currency: "BDT", nisabMethod: "SILVER" });
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -32,16 +53,24 @@ export function SettingsForm() {
 
   useEffect(() => {
     let cancelled = false;
+    const local = readStoredSettings();
+    setSettings((prev) => ({ ...prev, ...local, locale: (local.locale as Locale) ?? locale }));
+
     const load = async () => {
       try {
         const response = await fetch("/api/settings", { cache: "no-store" });
-        if (!response.ok) throw new Error();
-        const data = (await response.json()) as Settings;
-        if (!cancelled) {
-          setSettings({ ...data, locale: (data.locale as Locale) ?? locale });
-        }
+        if (!response.ok) throw new Error("settings");
+        const data = (await response.json()) as Partial<Settings>;
+        if (cancelled) return;
+        const merged: Settings = {
+          locale: (data.locale as Locale) ?? local.locale ?? locale,
+          currency: data.currency ?? local.currency ?? DEFAULT_SETTINGS.currency,
+          nisabMethod: data.nisabMethod === "GOLD" ? "GOLD" : "SILVER",
+        };
+        setSettings(merged);
+        saveLocalSettings(merged);
       } catch {
-        if (!cancelled) toast.error(t("settings.unableLoad"));
+        // Keep local settings; server may be unavailable on localhost.
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -54,23 +83,30 @@ export function SettingsForm() {
 
   const save = async () => {
     setSaving(true);
+    const next = { ...settings };
+    saveLocalSettings(next);
+    setLocale(next.locale);
+    try {
+      window.dispatchEvent(new CustomEvent("mizan:currency-changed", { detail: next.currency }));
+    } catch {
+      // ignore
+    }
+
     try {
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(next),
       });
       if (!response.ok) {
-        toast.error(t("settings.unableSave"));
+        // Saved locally; server sync unavailable.
+        toast.success(t("settings.saved"));
         return;
       }
-      setLocale(settings.locale);
-      window.localStorage.setItem("mizan-currency", settings.currency);
-      window.localStorage.setItem("mizan-nisab-method", settings.nisabMethod);
-      window.dispatchEvent(new CustomEvent("mizan:currency-changed", { detail: settings.currency }));
       toast.success(t("settings.saved"));
     } catch {
-      toast.error(t("settings.unableSave"));
+      // Saved locally even if server is unavailable.
+      toast.success(t("settings.saved"));
     } finally {
       setSaving(false);
     }

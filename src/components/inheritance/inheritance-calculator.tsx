@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Calculator, ChevronRight, CircleAlert, Download, Loader2, Minus, Plus, Save, UserPlus, UserMinus } from "lucide-react";
@@ -28,6 +28,7 @@ import { HEIR_GROUPS, heirLabel } from "./heir-catalog";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { buildLocalInheritanceDetail, loadDraft, saveDraft, upsertLocalHistory } from "@/lib/local-history";
 
 type EstateForm = Omit<InheritanceRequest, "heirs">;
 
@@ -94,11 +95,12 @@ export function InheritanceCalculator() {
   const [deceasedList, setDeceasedList] = useState<DeceasedState[]>([]);
 
   const form = useForm<EstateForm>({ resolver: zodResolver(inheritanceRequestSchema.omit({ heirs: true })), defaultValues });
-  const { register, handleSubmit, watch, setValue, reset } = form;
+  const { register, handleSubmit, watch, setValue, reset, control } = form;
   // eslint-disable-next-line react-hooks/incompatible-library -- RHF's watch() is required for reactive form values.
   const currency = watch("currency");
   const deceasedGender = watch("deceasedGender") as "MALE" | "FEMALE";
-  const watchedValues = useWatch({ control: form.control }) as EstateForm;
+  const watchedValues = useWatch({ control }) as EstateForm;
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** Pure client-side preview used only for inline nisab labels and tooltips. */
   const buildPreview = (
@@ -128,21 +130,57 @@ export function InheritanceCalculator() {
     if (storedCurrency && isCurrencyCode(storedCurrency)) setValue("currency", storedCurrency);
 
     const raw = window.localStorage.getItem("mizan:reopen:inheritance");
-    if (!raw) return;
-    window.localStorage.removeItem("mizan:reopen:inheritance");
-    try {
-      const parsed = inheritanceRequestSchema.safeParse(JSON.parse(raw));
-      if (parsed.success) {
-        const { heirs, ...estate } = parsed.data;
-        reset(estate);
-        setCounts(Object.fromEntries(heirs.map((heir) => [heir.type, heir.count])));
-        setMode("SINGLE");
-        toast.success(t("inheritance.toast.savedLoaded"));
+    if (raw) {
+      window.localStorage.removeItem("mizan:reopen:inheritance");
+      try {
+        const parsed = inheritanceRequestSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) {
+          const { heirs, ...estate } = parsed.data;
+          reset(estate);
+          setCounts(Object.fromEntries(heirs.map((heir) => [heir.type, heir.count])));
+          setMode("SINGLE");
+          toast.success(t("inheritance.toast.savedLoaded"));
+          return;
+        }
+      } catch {
+        // Ignore malformed local data.
       }
-    } catch {
-      // Ignore malformed local data.
+    }
+
+    const draft = loadDraft<Record<string, unknown>>("inheritance");
+    if (draft && typeof draft === "object") {
+      try {
+        if (draft.estate && typeof draft.estate === "object") {
+          const parsedEstate = inheritanceRequestSchema.omit({ heirs: true }).safeParse(draft.estate);
+          if (parsedEstate.success) reset(parsedEstate.data as EstateForm);
+        }
+        if (draft.counts && typeof draft.counts === "object") setCounts(draft.counts as Partial<Record<HeirType, number>>);
+        if (draft.mode === "MUNASAKHA" || draft.mode === "SINGLE") setMode(draft.mode);
+        if (Array.isArray(draft.deceasedList)) setDeceasedList(draft.deceasedList as DeceasedState[]);
+      } catch {
+        // ignore malformed draft
+      }
     }
   }, [reset, setValue, t]);
+
+  useEffect(() => {
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      try {
+        saveDraft("inheritance", {
+          mode,
+          counts,
+          deceasedList,
+          estate: watchedValues ?? {},
+        });
+      } catch {
+        // ignore
+      }
+    }, 400);
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+  }, [mode, counts, deceasedList, watchedValues]);
 
   const adjust = (type: HeirType, delta: number) => {
     const current = counts[type] ?? 0;
@@ -329,15 +367,21 @@ export function InheritanceCalculator() {
     if (!lastInput) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "inheritance", input: lastInput }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        toast.error(payload.error ?? t("inheritance.unableSave"));
-        return;
+      try {
+        const localDetail = buildLocalInheritanceDetail(lastInput);
+        upsertLocalHistory(localDetail);
+      } catch {
+        // ignore local build errors
+      }
+
+      try {
+        await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "inheritance", input: lastInput }),
+        });
+      } catch {
+        // server unavailable; local save already done
       }
       toast.success(t("zakah.saved"));
     } catch {

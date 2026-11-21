@@ -13,8 +13,8 @@ export const TRUSTED_SOURCES = {
   quranpedia: "https://www.quranpedia.net/",
   quranCom: "https://quran.com/",
   sunnah: "https://sunnah.com/",
-  dorar: "https://www.dorar.net/",
-  islamicReliefZakah: "https://www.islamic-relief.org.uk/zakat/",
+  dorar: "https://dorar.net/feqhia",
+  islamicReliefZakah: "https://www.islamic-relief.org.uk/giving/islamic-giving/zakat/",
   aaOIFI: "https://aaoifi.com/",
 } as const;
 
@@ -112,9 +112,9 @@ export const EVIDENCE: Record<string, EvidenceReference> = {
     label: "Hadith on the zakah rate",
     translation: "The Prophet ﷺ took one quarter of a tenth (2.5%) from zakah wealth.",
     authenticity: "UNVERIFIED",
-    sourceUrl: TRUSTED_SOURCES.sunnah,
+    sourceUrl: "https://sunnah.com/abudawud/9",
     verificationStatus: "REFERENCE_REQUIRED",
-    note: "Exact wording, collection and number intentionally omitted until verified. Do not present as authentic evidence.",
+    note: "Linked to a relevant Book of Zakat section for reference. The exact wording, collection, and narration number are not identified here and must be verified before use as specific evidence.",
   },
 
   CLASSICAL_HIDAYAH: {

@@ -73,7 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${poppins.variable} ${notoArabic.variable} ${hindSiliguri.variable}`}
     >
-      <body className="min-h-dvh antialiased">
+      <body className="min-h-dvh antialiased" suppressHydrationWarning>
         <ThemeProvider>
           <LocaleProvider>
             <TooltipProvider>

@@ -191,7 +191,7 @@ async function main() {
       translation: "The Prophet ﷺ prescribed one fortieth (2.5%) on zakahable wealth.",
       authenticity: "UNVERIFIED" as const,
       ruling: "The standard zakah rate on monetary wealth.",
-      externalUrl: "https://sunnah.com/",
+      externalUrl: "https://sunnah.com/abudawud/9",
     },
   ];
   for (const h of hadiths) {

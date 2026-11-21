@@ -18,18 +18,39 @@ const liabilityType = z.enum([
 const money = z.number().finite().min(0).max(1e15);
 const rate = z.number().finite().min(0).max(1e6);
 
+function optionalNumber<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((v) => {
+    if (v === "" || v === null || v === undefined) return undefined;
+    if (typeof v === "number" && !Number.isFinite(v)) return undefined;
+    return v;
+  }, schema.optional());
+}
+
+function requiredNumber<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((v) => {
+    if (v === "" || v === null || v === undefined) return undefined;
+    if (typeof v === "number" && !Number.isFinite(v)) return undefined;
+    return v;
+  }, schema);
+}
+
+const optionalMoney = optionalNumber(money);
+const optionalPurity = optionalNumber(z.number().min(0).max(1));
+const requiredMoney = requiredNumber(money);
+const requiredRate = requiredNumber(rate);
+
 export const zakahAssetSchema = z.object({
   id: z.string().min(1),
   category: assetCategory,
   label: z.string().max(120).optional(),
-  amount: money.optional(),
-  weightGrams: money.optional(),
-  purity: z.number().min(0).max(1).optional(),
-  marketValue: money.optional(),
+  amount: optionalMoney,
+  weightGrams: optionalMoney,
+  purity: optionalPurity,
+  marketValue: optionalMoney,
   currency: z.string().min(3).max(4),
-  conversionRateToBase: rate,
-  quantity: money.optional(),
-  unitValue: money.optional(),
+  conversionRateToBase: requiredRate,
+  quantity: optionalMoney,
+  unitValue: optionalMoney,
   irrigation: z.enum(["RAIN_FED", "IRRIGATED", "MIXED"]).optional(),
 });
 
@@ -37,9 +58,9 @@ export const zakahLiabilitySchema = z.object({
   id: z.string().min(1),
   type: liabilityType,
   label: z.string().max(120).optional(),
-  amount: money,
+  amount: requiredMoney,
   currency: z.string().min(3).max(4),
-  conversionRateToBase: rate,
+  conversionRateToBase: requiredRate,
   dueNow: z.boolean(),
 });
 
@@ -53,10 +74,10 @@ export const zakahRequestSchema = z.object({
   liabilities: z.array(zakahLiabilitySchema).max(100),
   nisab: z.object({
     method: z.enum(["GOLD", "SILVER"]),
-    goldNisabGrams: money,
-    silverNisabGrams: money,
-    goldPricePerGram: money,
-    silverPricePerGram: money,
+    goldNisabGrams: requiredMoney,
+    silverNisabGrams: requiredMoney,
+    goldPricePerGram: requiredMoney,
+    silverPricePerGram: requiredMoney,
     priceSource: z.string().max(200),
     isManual: z.boolean(),
     recordedAt: z.string().datetime({ offset: true }).or(z.string().min(1)),
