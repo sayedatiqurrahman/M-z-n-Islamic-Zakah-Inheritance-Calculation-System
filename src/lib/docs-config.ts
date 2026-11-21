@@ -58,15 +58,15 @@ export const DOCS: DocItem[] = [
   },
 ];
 
-const GITHUB_RAW_BASE =
-  "https://raw.githubusercontent.com/sayedatiqurrahman/M-z-n-Islamic-Zakah-Inheritance-Calculation-System/main/docs";
+const GITHUB_DOCS_BASE =
+  "https://github.com/sayedatiqurrahman/M-z-n-Islamic-Zakah-Inheritance-Calculation-System/blob/main/docs";
 
 export function getDocBySlug(slug: string): DocItem | undefined {
   return DOCS.find((d) => d.slug === slug);
 }
 
 export function githubDocUrl(file: string): string {
-  return `${GITHUB_RAW_BASE}/${file}`;
+  return `${GITHUB_DOCS_BASE}/${file}`;
 }
 
 export interface TocHeading {

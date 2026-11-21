@@ -239,6 +239,11 @@ async function getSpotMetalQuote(metal: MetalKey, currency: string): Promise<Met
 
   await recordPrice(metal, currency, pricePerGram, previous, GOLD_API_SOURCE, GOLD_API_SOURCE_URL);
 
+  const basisLabel =
+    metal === "GOLD"
+      ? "International spot pure gold (24K XAU, USD/oz) converted via USD reference rate"
+      : "International spot silver (XAG, USD/oz) converted via USD reference rate";
+
   return {
     metal,
     currency,
@@ -246,7 +251,7 @@ async function getSpotMetalQuote(metal: MetalKey, currency: string): Promise<Met
     pricePerOunceUsd: round(spot.pricePerOunceUsd, 2),
     usdToCurrency: round(fx.rate, 6),
     basis: "SPOT",
-    basisLabel: "International spot (USD/oz) converted via USD reference rate",
+    basisLabel,
     source: GOLD_API_SOURCE,
     sourceUrl: GOLD_API_SOURCE_URL,
     providerUpdatedAt: spot.updatedAt,

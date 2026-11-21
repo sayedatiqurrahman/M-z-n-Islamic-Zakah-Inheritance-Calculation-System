@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2, Calculator, CircleAlert, Loader2, Save, Download, Wallet, Sprout } from "lucide-react";
+import { Plus, Trash2, Calculator, CircleAlert, Info, Loader2, Save, Download, Wallet, Sprout } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -105,8 +106,8 @@ const defaultValues: ZakahRequest = {
   madhhab: "HANAFI",
   methodologyVersion: ZAKAH_METHODOLOGY_VERSION,
   currency: "BDT",
-  ownershipConfirmed: false,
-  growthConditionConfirmed: false,
+  ownershipConfirmed: true,
+  growthConditionConfirmed: true,
   assets: [{ id: "a1", category: "CASH_HOME", amount: 0, currency: "BDT", conversionRateToBase: 1 }],
   liabilities: [],
   nisab: {
@@ -136,6 +137,7 @@ export function ZakahCalculator() {
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const resultSectionRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<ZakahRequest>({
     resolver: zodResolver(zakahRequestSchema) as never,
@@ -373,6 +375,13 @@ export function ZakahCalculator() {
     }
   };
 
+  useEffect(() => {
+    if (!result && !unsupported) return;
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches) {
+      resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [result, unsupported]);
+
   const primaryCategory = watch("assets.0.category") as ZakahAssetCategory | undefined;
   const primaryOptions: readonly string[] =
     primaryCategory && !MONEY_CATEGORIES.includes(primaryCategory as (typeof MONEY_CATEGORIES)[number])
@@ -380,7 +389,8 @@ export function ZakahCalculator() {
       : MONEY_CATEGORIES;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <LiveMetalPrices currency={currency} onApply={applyLivePrices} autoApply />
 
@@ -413,7 +423,19 @@ export function ZakahCalculator() {
               <Input type="number" step="any" min="0" {...register("nisab.silverNisabGrams", { valueAsNumber: true })} />
             </div>
             <div className="space-y-1.5">
-              <Label>{t("zakah.goldPrice")}</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>{t("zakah.goldPrice")}</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="inline-flex text-muted-foreground hover:text-foreground" aria-label={t("zakah.goldPrice")}>
+                      <Info className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {t("zakah.goldPurityNote")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <Input
                 type="number"
                 step="any"
@@ -763,43 +785,9 @@ export function ZakahCalculator() {
           )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("zakah.recipientsTitle")}</CardTitle>
-            <CardDescription>{t("zakah.recipientsDesc")}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {ZAKAH_RECIPIENT_PURPOSES.map((purpose) => (
-              <div
-                key={purpose.id}
-                className="rounded-lg border p-3"
-                title={`${t("zakah.recipient.source")} — ${purpose.evidence.map((item) => item.label).join(", ")}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-sm">{t(`zakah.recipient.${purpose.id}`)}</p>
-                    <p dir="rtl" className="font-heading text-sm text-emerald-800">{purpose.arabic}</p>
-                  </div>
-                  <Badge variant="outline" className="text-[10px]">{t("zakah.needsReview")}</Badge>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {t(`zakah.recipient.${purpose.id}.desc`)}
-                </p>
-              </div>
-            ))}
-            <a
-              href={EVIDENCE.QURAN_ZAKAH_RECIPIENTS.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-emerald-700 hover:underline sm:col-span-2"
-            >
-              {t("zakah.recipient.source")}
-            </a>
-          </CardContent>
-        </Card>
       </form>
 
-      <div className="space-y-4">
+      <div ref={resultSectionRef} className="space-y-4 scroll-mt-24">
         {unsupported && (
           <Alert className="border-amber-300 bg-amber-50">
             <CircleAlert className="size-4" />
@@ -824,6 +812,42 @@ export function ZakahCalculator() {
           />
         )}
       </div>
+    </div>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">{t("zakah.recipientsTitle")}</CardTitle>
+          <CardDescription>{t("zakah.recipientsDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {ZAKAH_RECIPIENT_PURPOSES.map((purpose) => (
+            <div
+              key={purpose.id}
+              className="rounded-lg border p-3"
+              title={`${t("zakah.recipient.source")} — ${purpose.evidence.map((item) => item.label).join(", ")}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">{t(`zakah.recipient.${purpose.id}`)}</p>
+                  <p dir="rtl" className="font-heading text-sm text-emerald-800">{purpose.arabic}</p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">{t("zakah.needsReview")}</Badge>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {t(`zakah.recipient.${purpose.id}.desc`)}
+              </p>
+            </div>
+          ))}
+          <a
+            href={EVIDENCE.QURAN_ZAKAH_RECIPIENTS.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-emerald-700 hover:underline sm:col-span-2 lg:col-span-4"
+          >
+            {t("zakah.recipient.source")}
+          </a>
+        </CardContent>
+      </Card>
     </div>
   );
 }

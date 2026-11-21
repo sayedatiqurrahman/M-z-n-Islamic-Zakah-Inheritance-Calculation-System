@@ -87,7 +87,10 @@ export const zakahRequestSchema = z.object({
   hawl: z.object({
     nisabFirstReachedDate: z.string().min(1),
     assessmentDate: z.string().min(1),
-    previousZakahDate: z.string().min(1).optional(),
+    previousZakahDate: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z.string().min(1).optional(),
+    ),
     hijriAssessmentDate: z.string().max(40).optional(),
     calendarMethod: z.enum(["TABULAR_CIVIL", "UMM_AL_QURA_APPROX"]),
     wealthRemainedAboveNisab: z.boolean(),

@@ -101,6 +101,7 @@ export function InheritanceCalculator() {
   const deceasedGender = watch("deceasedGender") as "MALE" | "FEMALE";
   const watchedValues = useWatch({ control }) as EstateForm;
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultSectionRef = useRef<HTMLDivElement>(null);
 
   /** Pure client-side preview used only for inline nisab labels and tooltips. */
   const buildPreview = (
@@ -124,6 +125,13 @@ export function InheritanceCalculator() {
   };
 
   const previewResult = mode === "SINGLE" ? buildPreview(counts, deceasedGender) : null;
+
+  useEffect(() => {
+    if (!result && !munasakhaResult && !unsupported) return;
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      resultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [result, munasakhaResult, unsupported]);
 
   useEffect(() => {
     const storedCurrency = window.localStorage.getItem("mizan-currency");
@@ -691,7 +699,7 @@ export function InheritanceCalculator() {
         </Card>
       </div>
 
-      <div className="space-y-4">
+      <div ref={resultSectionRef} className="space-y-4 scroll-mt-24">
         {unsupported ? (
           <Alert className="border-amber-300 bg-amber-50">
             <CircleAlert className="size-4" />

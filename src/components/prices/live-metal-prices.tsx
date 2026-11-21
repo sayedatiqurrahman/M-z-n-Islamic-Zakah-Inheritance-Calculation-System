@@ -47,6 +47,9 @@ function MetalCard({ quote }: { quote: MetalQuote }) {
             {formatAmount(quote.pricePerGram, quote.currency)}
             <span className="ms-1 text-xs font-normal text-muted-foreground">{t("prices.perGramLabel")}</span>
           </p>
+          {isGold && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{t("prices.goldPurity")}</p>
+          )}
         </div>
         <Badge variant="secondary" className="bg-emerald-50 text-[10px] text-emerald-800">
           {t("prices.updated")}
@@ -88,11 +91,18 @@ function MetalCard({ quote }: { quote: MetalQuote }) {
             {quote.basisLabel ?? t("prices.localMarket")}
           </p>
         ) : quote.pricePerOunceUsd !== null && quote.usdToCurrency !== null ? (
-          <p>
-            <span className="font-medium text-slate-600">{t("prices.spot")}</span>{" "}
-            ${quote.pricePerOunceUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · 1 USD ={" "}
-            {quote.usdToCurrency.toLocaleString("en-US", { maximumFractionDigits: 4 })} {quote.currency}
-          </p>
+          <>
+            <p>
+              <span className="font-medium text-slate-600">{t("prices.spot")}</span>{" "}
+              ${quote.pricePerOunceUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} · 1 USD ={" "}
+              {quote.usdToCurrency.toLocaleString("en-US", { maximumFractionDigits: 4 })} {quote.currency}
+            </p>
+            {quote.basisLabel && (
+              <p>
+                <span className="font-medium text-slate-600">{t("prices.basis")}</span> {quote.basisLabel}
+              </p>
+            )}
+          </>
         ) : null}
         <a
           href={quote.sourceUrl}

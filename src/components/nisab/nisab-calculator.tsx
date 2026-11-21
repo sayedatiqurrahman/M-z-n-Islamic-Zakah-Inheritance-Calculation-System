@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LiveMetalPrices } from "@/components/prices/live-metal-prices";
 import { CurrencyCombobox } from "@/components/currency/currency-combobox";
 import { formatAmount, formatDateTime } from "@/lib/formatting";
@@ -93,7 +94,19 @@ export function NisabCalculator() {
               <Input type="number" step="0.01" value={goldGrams} onChange={(e) => setGoldGrams(Number(e.target.value))} />
             </div>
             <div className="space-y-1.5">
-              <Label>{t("nisab.goldPrice", { code: currency })}</Label>
+              <div className="flex items-center gap-1.5">
+                <Label>{t("nisab.goldPrice", { code: currency })}</Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" className="inline-flex text-muted-foreground hover:text-foreground" aria-label={t("nisab.goldPrice", { code: currency })}>
+                      <Info className="size-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {t("nisab.goldPurityNote")}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               <Input
                 type="number"
                 step="0.01"
