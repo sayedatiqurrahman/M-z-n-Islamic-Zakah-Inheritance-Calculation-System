@@ -94,9 +94,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {t("common.methodologyBadge")}
             </Badge>
           </div>
-          <p className="px-2 text-[10px] leading-relaxed text-muted-foreground">
-            {t("app.version")}
-          </p>
+          <div className="flex items-center justify-between px-2">
+            <Link
+              href="/docs"
+              className="text-xs text-muted-foreground underline-offset-4 hover:text-emerald-700 hover:underline dark:hover:text-emerald-300"
+            >
+              {t("nav.docs")}
+            </Link>
+            <p className="text-[10px] leading-relaxed text-muted-foreground">{t("app.version")}</p>
+          </div>
         </div>
       </aside>
 
@@ -117,8 +123,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </SheetHeader>
                 <div className="p-4">
                   <NavigationLinks onNavigate={() => document.querySelector("[data-state=open]")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))} />
-                  <div className="mt-4 border-t border-emerald-100 pt-4 dark:border-emerald-500/15">
+                  <div className="mt-4 space-y-3 border-t border-emerald-100 pt-4 dark:border-emerald-500/15">
                     <LivePriceTicker className="flex" />
+                    <Link
+                      href="/docs"
+                      onClick={() => document.querySelector("[data-state=open]")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))}
+                      className="block text-sm text-muted-foreground underline-offset-4 hover:text-emerald-700 hover:underline dark:hover:text-emerald-300"
+                    >
+                      {t("nav.docs")}
+                    </Link>
                   </div>
                 </div>
               </SheetContent>
