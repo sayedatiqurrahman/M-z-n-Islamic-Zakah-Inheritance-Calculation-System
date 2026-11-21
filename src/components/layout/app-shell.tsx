@@ -2,18 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Scale, ChevronDown, Check } from "lucide-react";
+import { Check, ChevronDown, LogIn, Menu, Moon, Scale, Sun, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { NAV_ITEMS } from "@/components/navigation/nav-items";
 import { LivePriceTicker } from "@/components/prices/live-price-ticker";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
+import { AuthHeaderButton } from "@/components/auth/auth-header-button";
 import { LOCALES } from "@/lib/i18n";
 import { useLocale } from "./locale-provider";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 
 function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -65,6 +75,85 @@ function LanguageSwitcher() {
             {locale === item.code && <Check className="size-4 text-emerald-600" />}
           </DropdownMenuItem>
         ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MobileHeaderMenu() {
+  const { t, locale, setLocale } = useLocale();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<{ id: string; email: string; name: string | null } | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (active) setUser(data.user ?? null);
+      } catch {
+        if (active) setUser(null);
+      }
+    };
+    void load();
+    window.addEventListener("mizan:auth-change", load);
+    return () => {
+      active = false;
+      window.removeEventListener("mizan:auth-change", load);
+    };
+  }, []);
+
+  const isDark = mounted && resolvedTheme === "dark";
+  const initial = (user?.name?.trim()?.[0] || user?.email?.[0] || "").toUpperCase();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" className="size-9 rounded-full p-0" aria-label={t("account.portal")}>
+          {user ? (
+            <span className="flex size-8 items-center justify-center rounded-full bg-emerald-700 text-xs font-semibold text-white">
+              {initial || "U"}
+            </span>
+          ) : (
+            <UserRound className="size-4" />
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="font-normal">
+          {user ? (
+            <div className="flex flex-col space-y-1">
+              <p className="text-sm font-medium leading-none">{user.name || t("account.noName")}</p>
+              <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("account.signIn")}</p>
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/account" className="flex items-center gap-2">
+            {user ? <UserRound className="size-4" /> : <LogIn className="size-4" />}
+            {user ? t("account.portal") : t("account.signIn")}
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">{t("common.language")}</DropdownMenuLabel>
+        {LOCALES.map((item) => (
+          <DropdownMenuItem key={item.code} onClick={() => setLocale(item.code)}>
+            <span className="flex-1">{item.native}</span>
+            {locale === item.code && <Check className="size-4 text-emerald-600" />}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
+          {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          <span>{isDark ? t("theme.toLight") : t("theme.toDark")}</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -142,13 +231,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
               <span className="font-bold text-emerald-900 dark:text-emerald-200">Mīzān</span>
             </Link>
-            <span className="hidden text-sm text-muted-foreground md:inline">{t("app.subtitle")}</span>
+            <span className="hidden text-sm text-muted-foreground lg:inline">{t("app.subtitle")}</span>
           </div>
-          <div className="flex items-center gap-1 sm:gap-3">
+          <div className="hidden items-center gap-1 lg:flex lg:gap-3">
             <LivePriceTicker />
-            <Badge variant="outline" className="hidden sm:inline-flex">{t("common.methodologyBadge")}</Badge>
+            <Badge variant="outline" className="hidden xl:inline-flex">{t("common.methodologyBadge")}</Badge>
+            <AuthHeaderButton />
             <ThemeToggle />
             <LanguageSwitcher />
+          </div>
+          <div className="lg:hidden">
+            <MobileHeaderMenu />
           </div>
         </header>
         <main className="flex-1 px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:pt-6 lg:p-8 lg:pb-8">

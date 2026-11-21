@@ -24,7 +24,7 @@ export function InheritanceChart({ outcomes, currency }: { outcomes: HeirOutcome
             <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
               {data.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
             </Pie>
-            <Tooltip formatter={(value) => `${Number(value).toLocaleString()} ${currency}`} />
+            <Tooltip formatter={(value) => `${Number(value).toLocaleString("en-US")} ${currency}`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
           </PieChart>
         </ResponsiveContainer>

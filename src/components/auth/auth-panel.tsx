@@ -56,6 +56,7 @@ export function AuthPanel() {
       }
       setUser(data.user ?? null);
       setPassword("");
+      window.dispatchEvent(new Event("mizan:auth-change"));
       toast.success(mode === "register" ? t("account.created") : t("account.signedIn"));
     } catch {
       toast.error(t("common.networkError"));
@@ -69,6 +70,7 @@ export function AuthPanel() {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
       setUser(null);
+      window.dispatchEvent(new Event("mizan:auth-change"));
       toast.success(t("account.signedOut"));
     } finally {
       setSubmitting(false);

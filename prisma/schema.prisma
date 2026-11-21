@@ -240,6 +240,7 @@ model User {
   profile   UserProfile?
   zakahCalculations ZakahCalculation[]
   inheritanceCases  InheritanceCase[]
+  familyPeople      FamilyPerson[]
 
   @@map("user")
 }
@@ -669,4 +670,79 @@ model CalculationStep {
   @@index([ownerType, zakahCalculationId])
   @@index([ownerType, inheritanceCaseId])
   @@map("calculation_step")
+}
+
+// ---------------------------------------------------------------------------
+// Account / Family / Nasab records (owner-scoped, privacy-first)
+// ---------------------------------------------------------------------------
+
+enum IdentityVerificationStatus {
+  UNDECLARED
+  SELF_DECLARED
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum FamilyRelationType {
+  PARENT_OF
+  SPOUSE_OF
+  SIBLING_OF
+  GUARDIAN_OF
+  OTHER
+}
+
+model FamilyPerson {
+  id                String   @id @default(cuid())
+  ownerUserId       String
+  owner             User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  fullName          String
+  gender            Gender?
+  dateOfBirth       DateTime?
+  dateOfDeath       DateTime?
+  isDeceased        Boolean  @default(false)
+  email             String?
+  relationToOwner   String?
+  notes             String?
+
+  /// Sensitive identity fields - stored encrypted at app layer; only owner-accessible APIs should return them.
+  nidEncrypted             String?
+  nidLast4                 String?
+  deathCertificateEncrypted String?
+  deathCertificateLast4    String?
+  identityVerificationStatus IdentityVerificationStatus @default(UNDECLARED)
+  identityVerifiedAt       DateTime?
+  identityVerificationNote String?
+
+  /// Optional link if this person corresponds to a system user (future/explicit consent).
+  linkedUserId      String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  relationshipsFrom FamilyRelationship[] @relation("FamilyRelationshipFrom")
+  relationshipsTo   FamilyRelationship[] @relation("FamilyRelationshipTo")
+
+  @@index([ownerUserId, createdAt])
+  @@index([ownerUserId, fullName])
+  @@index([ownerUserId, isDeceased])
+  @@map("family_person")
+}
+
+model FamilyRelationship {
+  id           String             @id @default(cuid())
+  ownerUserId  String
+  fromPersonId String
+  fromPerson   FamilyPerson       @relation("FamilyRelationshipFrom", fields: [fromPersonId], references: [id], onDelete: Cascade)
+  toPersonId   String
+  toPerson     FamilyPerson       @relation("FamilyRelationshipTo", fields: [toPersonId], references: [id], onDelete: Cascade)
+  relationType FamilyRelationType
+  notes        String?
+  createdAt    DateTime           @default(now())
+
+  @@unique([ownerUserId, fromPersonId, toPersonId, relationType])
+  @@index([ownerUserId])
+  @@index([fromPersonId])
+  @@index([toPersonId])
+  @@map("family_relationship")
 }

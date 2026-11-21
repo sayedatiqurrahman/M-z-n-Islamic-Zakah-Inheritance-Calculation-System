@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, FileText, History, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { CloudUpload, Download, Eye, FileText, History, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -138,6 +138,34 @@ export function HistoryList() {
     }
   };
 
+  const saveToCloud = async (item: HistoryItem) => {
+    setBusyId(item.id);
+    try {
+      const detail = getLocalHistoryDetail(item.type, item.id);
+      if (!detail?.input) {
+        toast.error(t("history.unableLoadCalc"));
+        return;
+      }
+      const response = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: item.type, input: detail.input }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        toast.error(payload.error ?? t("common.error"));
+        return;
+      }
+      removeLocalHistory(item.type, item.id);
+      toast.success(t("history.savedToCloud"));
+      await load();
+    } catch {
+      toast.error(t("common.networkError"));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const remove = async (item: HistoryItem) => {
     if (!window.confirm(t("history.deleteConfirm"))) return;
     setBusyId(item.id);
@@ -224,6 +252,9 @@ export function HistoryList() {
                   <Badge variant="secondary" className="bg-emerald-50 text-[10px] text-emerald-800">
                     {item.type === "zakah" ? t("history.zakah") : t("history.inheritance")}
                   </Badge>
+                  {(item.local || item.id.startsWith("local-")) && (
+                    <Badge variant="outline" className="text-[10px]">Local</Badge>
+                  )}
                   <p className="truncate text-sm font-semibold text-emerald-950">{item.title}</p>
                   {!item.supported && (
                     <Badge variant="outline" className="border-amber-300 text-[10px] text-amber-800">
@@ -244,6 +275,11 @@ export function HistoryList() {
                 <Button size="sm" variant="outline" onClick={() => void download(item)} disabled={busyId === item.id}>
                   <Download className="size-3.5" /> {t("history.pdf")}
                 </Button>
+                {(item.local || item.id.startsWith("local-")) && (
+                  <Button size="sm" variant="outline" onClick={() => void saveToCloud(item)} disabled={busyId === item.id}>
+                    <CloudUpload className="size-3.5" /> {t("history.saveToCloud")}
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"

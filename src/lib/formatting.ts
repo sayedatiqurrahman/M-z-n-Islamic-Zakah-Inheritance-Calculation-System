@@ -66,11 +66,13 @@ function safeNumberFormat(code: string, value: number, locale = "en-US"): string
       currencyDisplay: "narrowSymbol",
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
+      numberingSystem: "latn",
     }).format(value);
   } catch {
     return `${code} ${value.toLocaleString(locale, {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
+      numberingSystem: "latn",
     })}`;
   }
 }
@@ -107,6 +109,7 @@ export function formatDate(date: Date | string, locale: Locale = "en"): string {
       day: "2-digit",
       month: "short",
       year: "numeric",
+      numberingSystem: "latn",
     }).format(value);
   } catch {
     return format(value, "dd MMM yyyy");
@@ -124,6 +127,7 @@ export function formatDateTime(date: Date | string, locale: Locale = "en"): stri
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
+      numberingSystem: "latn",
     }).format(value);
   } catch {
     return format(value, "dd MMM yyyy, HH:mm");

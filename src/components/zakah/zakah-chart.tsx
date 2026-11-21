@@ -19,7 +19,7 @@ export function ZakahChart({ assets, currency }: { assets: ClassifiedAsset[]; cu
             <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={false}>
               {data.map((_, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
             </Pie>
-            <Tooltip formatter={(value) => `${Number(value).toLocaleString()} ${currency}`} />
+            <Tooltip formatter={(value) => `${Number(value).toLocaleString("en-US")} ${currency}`} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
           </PieChart>
         </ResponsiveContainer>
